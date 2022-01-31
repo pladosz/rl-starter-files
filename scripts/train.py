@@ -9,6 +9,7 @@ from rew_gen.RND_model import RNDModelNet
 
 import utils
 from utils import device
+from scripts import visualize_debug
 from model import ACModel
 import time
 import torch
@@ -187,7 +188,9 @@ while num_frames < args.frames:
             update += 1
         
         #save final animation
-
+        #if update == 79:
+        #    visualiser = visualize_debug.eval_visualise(args.env,acmodels_list[i].state_dict(),i, argmax = True)
+        #    visualiser.run()
         # Print logs
         if update % args.log_interval == 0:
             fps = logs["num_frames"]/(update_end_time - update_start_time)
@@ -227,7 +230,7 @@ while num_frames < args.frames:
             if args.save_interval > 0 and update % args.save_interval == 0:
                 status = {"num_frames": num_frames, "update": update,
                            "model_state": acmodels_list[i].state_dict(), "optimizer_state": algos_list[i].optimizer.state_dict()}
-            if hasattr(preprocess_obss, "vocab"):
-                status["vocab"] = preprocess_obss.vocab.vocab
-            utils.save_status(status, model_dir,i)
-            txt_logger.info("Status saved")
+                if hasattr(preprocess_obss, "vocab"):
+                    status["vocab"] = preprocess_obss.vocab.vocab
+                utils.save_status(status, model_dir,i)
+                txt_logger.info("Status saved")

@@ -35,7 +35,6 @@ parser.add_argument("--agent_id", type=int, default=0,
                     help="agent id to run visualisation on")
 
 args = parser.parse_args()
-
 # Set seed for all randomness sources
 
 utils.seed(args.seed)
