@@ -10,6 +10,7 @@ from rew_gen.RND_model import RNDModelNet
 import utils
 from utils import device
 from scripts import visualize_debug
+from scripts.eval import eval
 from model import ACModel
 import time
 import torch
@@ -38,6 +39,8 @@ parser.add_argument("--frames", type=int, default=10**7,
                     help="number of frames of training (default: 1e7)")
 parser.add_argument("--outer_workers", type=int, default=16,
                     help="number of evolutionary workers")
+parser.add_argument("--updates_per_evo_update", type=int, default=60,
+                    help="number of training steps of policy agent before rew_gen is updated")
 
 ## Parameters for main algorithm
 parser.add_argument("--epochs", type=int, default=4,
@@ -230,12 +233,18 @@ while num_frames < args.frames:
                 utils.save_status(status, model_dir,i)
                 txt_logger.info("Status saved")
         #do evolutionary update
-        if update % args.updates_per_evo_update:
+        if update % args.updates_per_evo_update and i == args.outer_workers-1:
             #eval interactions with env
-            for i in range(0,args.outer_workers):
-                visualiser = visualize_debug.eval_visualise(args.env,acmodels_list[i].state_dict(),i, argmax = True)
-                visualiser.run()
-
             #collect trajectories
             trajectories_list = []
-            entropy_list = []            
+            entropy_list = []   
+            for i in range(0,args.outer_workers):
+                evaluator = eval(args.env,acmodels_list[i].state_dict(), RND_list[i].state_dict(), rew_gen_list[i].state_dict(),i, argmax = True)
+                trajectory = evaluator.run()
+                trajectories_list.append(trajectory)
+            #add random trajectories to trajectory buffer
+            if update == 0:
+                sample_number = 10
+
+
+         
