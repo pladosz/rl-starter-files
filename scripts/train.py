@@ -145,6 +145,11 @@ for i in range(0, args.outer_workers):
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
+agent_to_copy_network = 2
+for i in range(0,args.outer_workers):
+    if i != agent_to_copy_network:
+        rew_gen_list[i].load_state_dict(rew_gen_list[agent_to_copy_network].state_dict())
+        RND_list[i].load_state_dict(RND_list[agent_to_copy_network].state_dict())
 
 
 # Load algo
@@ -217,16 +222,6 @@ while num_frames < args.frames:
             header += ["return_" + key for key in return_per_episode.keys()]
             data += return_per_episode.values()
 
-        #if status["num_frames"] == 0:
-        #    csv_logger.writerow(header)
-        #csv_logger.writerow(data)
-        #csv_file.flush()
-
-        #for field, value in zip(header, data):
-        #    tb_writer.add_scalar(field, value, num_frames)
-
-            #Save status
-
             if args.save_interval > 0 and update % args.save_interval == 0:
                 status = {"num_frames": num_frames, "update": update,
                            "model_state": acmodels_list[i].state_dict(), "optimizer_state": algos_list[i].optimizer.state_dict()}
@@ -234,3 +229,13 @@ while num_frames < args.frames:
                     status["vocab"] = preprocess_obss.vocab.vocab
                 utils.save_status(status, model_dir,i)
                 txt_logger.info("Status saved")
+        #do evolutionary update
+        if update % args.updates_per_evo_update:
+            #eval interactions with env
+            for i in range(0,args.outer_workers):
+                visualiser = visualize_debug.eval_visualise(args.env,acmodels_list[i].state_dict(),i, argmax = True)
+                visualiser.run()
+
+            #collect trajectories
+            trajectories_list = []
+            entropy_list = []            

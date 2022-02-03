@@ -18,35 +18,37 @@ class RewGenNet(torch.nn.Module):
         self.fc_layer_1 = torch.nn.Linear(state_representation_size, 256)
         self.fc_layer_2 = torch.nn.Linear(256, 128)
         self.fc_layer_3 = torch.nn.Linear(128, 64)
-        #self.memory_layer = torch.nn.RNN(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
-        self.memory_layer = torch.nn.Linear(64, 32)
+        self.memory_layer = torch.nn.RNN(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
+        #self.memory_layer = torch.nn.Linear(64, 32)
         self.fc_layer_4 = torch.nn.Linear(32, 1)
         self.to(self.device)
         #self.zero_init()
         self.apply(init_params)
 
 
-    def forward(self, x):
+    def forward(self, x, hidden_state):
+        self.hidden_state = hidden_state
         #activation = torch.nn.Hardshrink()
-        x = torch.relu(self.fc_layer_1(torch.tensor(x).to(self.device)))
-        x = torch.relu(self.fc_layer_2(torch.tensor(x).to(self.device)))
-        x = torch.relu(self.fc_layer_3(torch.tensor(x).to(self.device)))
-        #if len(x.shape) == 1:
-        #    x = x[None,None,:]
-        #if len(x.shape) == 2:
-        #    x = x[None,:]
-        #x, self.hidden_state = self.memory_layer(x, self.hidden_state)
-        x = self.memory_layer(x)
-        self.hidden_state = self.hidden_state.detach()
-        x = x.squeeze(0)
-        y = torch.tanh(self.fc_layer_4(x))
-        return y
+        with torch.no_grad():
+            x = torch.relu(self.fc_layer_1(torch.tensor(x).to(self.device)))
+            x = torch.relu(self.fc_layer_2(torch.tensor(x).to(self.device)))
+            x = torch.relu(self.fc_layer_3(torch.tensor(x).to(self.device)))
+            if len(x.shape) == 1:
+                x = x[None,None,:]
+            if len(x.shape) == 2:
+                x = x[None,:]
+            x, self.hidden_state = self.memory_layer(x, self.hidden_state)
+            #x = self.memory_layer(x)
+            self.hidden_state = self.hidden_state.detach()
+            x = x.squeeze(0)
+            y = torch.tanh(self.fc_layer_4(x))
+        return y, self.hidden_state
 
     def init_hidden(self, training = False):
         if training == False:
-            self.hidden_state = torch.tensor(torch.zeros((1,8,32))).to(self.device)
+            self.hidden_state = torch.tensor(torch.zeros((1,16,32))).to(self.device)
         else:
-            self.hidden_state = torch.tensor(torch.zeros((1,8,32))).to(self.device)
+            self.hidden_state = torch.tensor(torch.zeros((1,16,32))).to(self.device)
     def reset_hidden(self, agent_id, training = False):
         if training == False:
             self.hidden_state[:,agent_id,:] = torch.tensor(torch.zeros((1,1,32))).to(self.device)
