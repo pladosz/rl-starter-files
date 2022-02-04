@@ -1,4 +1,7 @@
+from hashlib import new
 import torch
+import copy
+import numpy as np
 
 # Function from https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
 def init_params(m):
@@ -103,8 +106,9 @@ class RewGenNet(torch.nn.Module):
         reward_network_params_third_layer = self.parameter_numel_per_layer(self.fc_layer_3)
         reward_network_memory_layer = self.parameter_numel_per_layer(self.memory_layer)
         reward_network_params_fourth_layer = self.parameter_numel_per_layer(self.fc_layer_4)
-        return reward_network_params_first_layer, reward_network_params_second_layer,  reward_network_params_third_layer, reward_network_memory_layer, reward_network_params_fourth_layer
-    
+        parameter_number = reward_network_params_first_layer + reward_network_params_second_layer + reward_network_params_third_layer + reward_network_memory_layer + reward_network_params_fourth_layer
+        #return reward_network_params_first_layer, reward_network_params_second_layer,  reward_network_params_third_layer, reward_network_memory_layer, reward_network_params_fourth_layer
+        return parameter_number
 
     def parameter_numel_per_layer (self,layer):
         layer_dict = layer.state_dict()
@@ -122,3 +126,23 @@ class RewGenNet(torch.nn.Module):
             param_list.append(torch.flatten(parameter_dict[parameters_key]))
         agent_param = torch.cat(param_list,dim = 0)
         return agent_param
+    
+    def randomly_mutate(self, noise_standard_deviation):
+        parameter_number = self.parameter_number()
+        self.network_noise = noise_standard_deviation*torch.empty((1,parameter_number)).normal_(mean = 0, std = noise_standard_deviation).to(self.device)
+        new_weights = copy.deepcopy(self.network_noise).squeeze()
+        state_dict = self.state_dict()
+        new_parameter_dict = {}
+        for param_type in state_dict:
+                numel = torch.numel(state_dict[param_type])
+                param_type_weight_update = new_weights[0:numel]
+                param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
+                new_parameter_dict[param_type] = param_type_weight_update + state_dict[param_type]
+                #delete already used weights
+                new_weights = new_weights[numel:]
+        if new_weights.shape[0] != 0:
+            print("I am error")
+            print(new_weights.shape)
+            exit()
+        self.load_state_dict(new_parameter_dict)
+
