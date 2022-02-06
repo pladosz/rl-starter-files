@@ -58,14 +58,6 @@ class RewGenNet(torch.nn.Module):
         else:
             self.hidden_state[:,agent_id,:] = torch.tensor(torch.zeros((1,1,32))).to(self.device)
     
-    def update_weights(self, reward_net_parameters):
-        #update weights per layer:
-        self.sum_weight_layer(self.fc_layer_1, reward_net_parameters[0])
-        self.sum_weight_layer(self.fc_layer_2, reward_net_parameters[1])
-        self.sum_weight_layer(self.fc_layer_3, reward_net_parameters[2])
-        self.sum_weight_layer(self.memory_layer, reward_net_parameters[3])  
-        self.sum_weight_layer(self.fc_layer_4, reward_net_parameters[4])
-        
     def zero_init(self):
         #update weights per layer:
         self.fill_zeros(self.fc_layer_1)
@@ -130,7 +122,10 @@ class RewGenNet(torch.nn.Module):
     def randomly_mutate(self, noise_standard_deviation):
         parameter_number = self.parameter_number()
         self.network_noise = noise_standard_deviation*torch.empty((1,parameter_number)).normal_(mean = 0, std = noise_standard_deviation).to(self.device)
-        new_weights = copy.deepcopy(self.network_noise).squeeze()
+        self.update_weights(copy.deepcopy(self.network_noise))
+
+    def update_weights(self,updates):
+        new_weights = updates.squeeze()
         state_dict = self.state_dict()
         new_parameter_dict = {}
         for param_type in state_dict:
