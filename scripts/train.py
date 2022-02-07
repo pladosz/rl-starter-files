@@ -312,11 +312,14 @@ while num_frames < args.frames:
             for ii in range(0,args.outer_workers):
                 algos_list[ii].rew_gen_model.load_state_dict(master_rew_gen.state_dict())
                 algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
-            #deal with policy weights (currently reset the weights to random ones)
-            for ii in range(0,args.outer_workers):
-                algos_list[ii].acmodel.load_state_dict(policy_agent_params_list[ii])
             # add trajectories to buffer
             best_agent_index = torch.argmax(rollout_diversity_eval)
+            #save most diverse agent
+            status = {"num_frames": num_frames, "update": update,
+                           "model_state": algos_list[best_agent_index].acmodel.state_dict(), "optimizer_state": algos_list[best_agent_index].optimizer.state_dict()}
+            if hasattr(preprocess_obss, "vocab"):
+                    status["vocab"] = preprocess_obss.vocab.vocab
+            utils.save_status(status, model_dir,i, best = True, update = update)
             top_trajectories_indexes = torch.topk(rollout_diversity_eval,2)[1]
             for ii in range(0,top_trajectories_indexes.shape[0]):
                 index = int(top_trajectories_indexes[ii].item())
@@ -330,6 +333,9 @@ while num_frames < args.frames:
             evol_end_time = time.time()
             print("computation_time")
             print(evol_end_time-evol_start_time)
+            #deal with policy weights (currently reset the weights to random ones)
+            for ii in range(0,args.outer_workers):
+                algos_list[ii].acmodel.load_state_dict(policy_agent_params_list[ii])
             #write to log
             #convert to floatin point
             rollout_diversity_eval = 1.0*rollout_diversity_eval
@@ -340,7 +346,7 @@ while num_frames < args.frames:
             tb_writer.add_scalar('diversity/mean',diversity_mean, num_frames)  
             tb_writer.add_scalar('diversity/max',diversity_max, num_frames)  
             tb_writer.add_scalar('diversity/min',diversity_min, num_frames)  
-            tb_writer.add_scalar('diversity/std',diversity_std, num_frames)  
+            tb_writer.add_scalar('diversity/std',diversity_std, num_frames)         
             evol_start_time = time.time()
 
          

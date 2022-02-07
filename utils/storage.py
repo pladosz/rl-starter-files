@@ -24,8 +24,11 @@ def get_model_dir(model_name):
     return os.path.join(get_storage_dir(), model_name)
 
 
-def get_status_path(model_dir,agent_id = 0):
-    return os.path.join(model_dir, "status_agent_id_{0}.pt".format(agent_id))
+def get_status_path(model_dir,agent_id = 0, best = False, update = 0):
+    if best == False:
+        return os.path.join(model_dir, "status_agent_id_{0}.pt".format(agent_id))
+    if best == True:
+        return os.path.join(model_dir, "status_best_u_{0}.pt".format(update))
 
 
 def get_status(model_dir, agent_id = 0):
@@ -33,8 +36,8 @@ def get_status(model_dir, agent_id = 0):
     return torch.load(path, map_location=device)
 
 
-def save_status(status, model_dir,agent_id = 0):
-    path = get_status_path(model_dir,agent_id)
+def save_status(status, model_dir,agent_id = 0,best = False, update = 0):
+    path = get_status_path(model_dir,agent_id,best, update)
     utils.create_folders_if_necessary(path)
     torch.save(status, path)
 
