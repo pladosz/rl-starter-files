@@ -11,16 +11,19 @@ from rew_gen.RND_model import RNDModelNet
 from utils.args_debug import args_debug
 
 class eval:
-    def __init__(self,env_name, model, RND_model, rew_gen_model, agent_id, seed = 0,argmax = False, pause  = 0.1, shift = 0, gif_dir = "test_eval", episodes = 3, memory = True, text = False, max_steps_per_episode = 255):
+    def __init__(self,env_name, model, RND_model, rew_gen_model, agent_id, seed = 0,argmax = False, pause  = 0.1, shift = 0, gif_dir = "test_eval", episodes = 3, memory = True, text = False, max_steps_per_episode = 650):
         self.args = args_debug(env_name, model,agent_id, seed,argmax, pause,shift, gif_dir, episodes, memory, text)
         # Set seed for all randomness sources
 
         utils.seed(self.args.seed)
         # Set device
         # Load environment
-        self.env = utils.make_env(self.args.env_name, self.args.seed)
+        seed = 120
+        self.env = utils.make_env(self.args.env_name, seed)
         for _ in range(self.args.shift):
+            self.env.seed =120
             self.env.reset()
+            self.env.seed =120
         # Load agent
         self.agent =  Agent_debug(self.env.observation_space, self.env.action_space, model,
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
@@ -35,7 +38,9 @@ class eval:
 
     def run(self):
         for episode in range(self.args.episodes):
+            self.env.seed =120
             obs = self.env.reset()
+            self.env.seed =120
             self.episode_length_counter =0
             while True:
                 #add trajectory

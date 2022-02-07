@@ -50,6 +50,8 @@ parser.add_argument("--rew_gen_lr", type=float, default = 0.001,
                     help="learning rate of outer evolutionary agent")
 parser.add_argument("--trajectory_updates_per_evo_updates", type=int, default=10,
                     help="number of evolutionary steps before trajectories get added to the buffer")
+parser.add_argument("--random_samples", type=int, default=6,
+                    help="number of initial random samples for trajectory buffer. Must be lower than number of outer workers")
 
 ## Parameters for main algorithm
 parser.add_argument("--epochs", type=int, default=4,
@@ -97,7 +99,10 @@ model_dir = utils.get_model_dir(model_name)
 
 txt_logger = utils.get_txt_logger(model_dir)
 csv_file, csv_logger = utils.get_csv_logger(model_dir)
+
+#make log for each agent
 tb_writer = tensorboardX.SummaryWriter(model_dir)
+
 
 # Log command and all script arguments
 
@@ -226,11 +231,14 @@ while num_frames < args.frames:
             return_per_episode = utils.synthesize(logs["return_per_episode"])
             rreturn_per_episode = utils.synthesize(logs["reshaped_return_per_episode"])
             num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
+            intrinsic_reward_per_episode = utils.synthesize(logs["intrinsic_reward_per_episode"])
 
             header = ["update", "frames", "FPS", "duration"]
             data = [update, num_frames, fps, duration]
             header += ["rreturn_" + key for key in rreturn_per_episode.keys()]
             data += rreturn_per_episode.values()
+            header += ["int_rreturn_" + key for key in intrinsic_reward_per_episode.keys()]
+            data += intrinsic_reward_per_episode.values()
             header += ["num_frames_" + key for key in num_frames_per_episode.keys()]
             data += num_frames_per_episode.values()
             header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]
@@ -239,19 +247,40 @@ while num_frames < args.frames:
             data += [i]
 
             txt_logger.info(
-                "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f} | id {}"
+                "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | rR_int:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f} | id {}"
                 .format(*data))
 
             header += ["return_" + key for key in return_per_episode.keys()]
             data += return_per_episode.values()
+    
+            if status["num_frames"] == 0:
+                csv_logger.writerow(header)
+            csv_logger.writerow(data)
+            csv_file.flush()
+
+            for field, value in zip(header, data):
+                tb_writer.add_scalars(field, {'agent_id_{0}'.format(i):value}, num_frames)        
 
             if args.save_interval > 0 and update % args.save_interval == 0:
                 status = {"num_frames": num_frames, "update": update,
-                           "model_state": acmodels_list[i].state_dict(), "optimizer_state": algos_list[i].optimizer.state_dict()}
+                           "model_state": algos_list[i].acmodel.state_dict(), "optimizer_state": algos_list[i].optimizer.state_dict()}
                 if hasattr(preprocess_obss, "vocab"):
                     status["vocab"] = preprocess_obss.vocab.vocab
                 utils.save_status(status, model_dir,i)
                 txt_logger.info("Status saved")
+        #add random trajectories to trajectory buffer at the beginning
+        if update == 1 and i == args.outer_workers-1:
+            trajectories_list = []
+            for ii in range(0,args.outer_workers):
+                evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model.state_dict(), algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+                trajectory = evaluator.run()
+                trajectories_list.append(trajectory.cpu().numpy())
+            sample_number = args.random_samples
+            for j in range(0,sample_number):
+                random_agent_id = torch.randint(0,args.outer_workers,(1,1)).item()
+                random_trajectory = trajectories_list[random_agent_id]
+                episodic_buffer.add_state(random_trajectory)
+            print('random trajectories added')
         #do evolutionary update
         if update % args.updates_per_evo_update == 0 and i == args.outer_workers-1:
             #eval interactions with env
@@ -259,16 +288,9 @@ while num_frames < args.frames:
             trajectories_list = []
             entropy_list = []   
             for ii in range(0,args.outer_workers):
-                evaluator = eval(args.env,acmodels_list[i].state_dict(), RND_list[i].state_dict(), rew_gen_list[i].state_dict(),i, argmax = True)
+                evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model.state_dict(), algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
                 trajectory = evaluator.run()
                 trajectories_list.append(trajectory.cpu().numpy())
-            #add random trajectories to trajectory buffer
-            if update == 0:
-                sample_number = 10
-                for j in range(0,sample_number):
-                    random_agent_id = torch.randint(0,args.outer_workers,(1,1)).item()
-                    random_trajectory = trajectories_list[random_agent_id]
-                    episodic_buffer.add_state(random_trajectory)
             #compute diversity for each outer worker
             diversity_eval_list = []
             for ii in range(0,args.outer_workers):
@@ -280,7 +302,7 @@ while num_frames < args.frames:
             #combine noise
             #TODO deal with resetting parameters in policy network
             #TODO master rew gen network is necessary to copy parameters from
-            noise_tuple = tuple([rew_gen_network.network_noise for rew_gen_network in rew_gen_list])
+            noise_tuple = tuple([algo.rew_gen_model.network_noise for algo in algos_list])
             total_noise = torch.cat(noise_tuple, dim = 0)
             noise_effect_sum = torch.einsum('i j, i -> j',total_noise, diversity_ranking.squeeze())
             rew_gen_weight_updates = args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
@@ -288,16 +310,16 @@ while num_frames < args.frames:
             master_rew_gen.update_weights(rew_gen_weight_updates)
             #update weights of each agent with master weights and initialize new noise
             for ii in range(0,args.outer_workers):
-                rew_gen_list[ii].load_state_dict(master_rew_gen.state_dict())
-                rew_gen_list[ii].randomly_mutate(args.noise_std)
+                algos_list[ii].rew_gen_model.load_state_dict(master_rew_gen.state_dict())
+                algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
             #deal with policy weights (currently reset the weights to random ones)
             for ii in range(0,args.outer_workers):
-                acmodels_list[ii].load_state_dict(policy_agent_params_list[i])
+                algos_list[ii].acmodel.load_state_dict(policy_agent_params_list[ii])
             # add trajectories to buffer
             best_agent_index = torch.argmax(rollout_diversity_eval)
             top_trajectories_indexes = torch.topk(rollout_diversity_eval,2)[1]
-            for i in range(0,top_trajectories_indexes.shape[0]):
-                index = int(top_trajectories_indexes[i].item())
+            for ii in range(0,top_trajectories_indexes.shape[0]):
+                index = int(top_trajectories_indexes[ii].item())
                 best_trajectories_list.append(trajectories_list[index])
             if evo_updates % args.trajectory_updates_per_evo_updates == 0:
                 for item in best_trajectories_list:
@@ -308,6 +330,17 @@ while num_frames < args.frames:
             evol_end_time = time.time()
             print("computation_time")
             print(evol_end_time-evol_start_time)
+            #write to log
+            #convert to floatin point
+            rollout_diversity_eval = 1.0*rollout_diversity_eval
+            diversity_mean =torch.mean(rollout_diversity_eval)
+            diversity_max = torch.max(rollout_diversity_eval)
+            diversity_min = torch.min(rollout_diversity_eval)
+            diversity_std = torch.std(rollout_diversity_eval)
+            tb_writer.add_scalar('diversity/mean',diversity_mean, num_frames)  
+            tb_writer.add_scalar('diversity/max',diversity_max, num_frames)  
+            tb_writer.add_scalar('diversity/min',diversity_min, num_frames)  
+            tb_writer.add_scalar('diversity/std',diversity_std, num_frames)  
             evol_start_time = time.time()
 
          
