@@ -4,7 +4,7 @@ import numpy as np
 
 class Episodic_buffer():
     '''buffer as implemented in NGU each agent holds its own buffer'''
-    def __init__(self, n_neighbors=4, mu = 0.9, zeta = 0.001, epsilon = 0.1, const = 0.1, s_m = 0.1):
+    def __init__(self, n_neighbors=10, mu = 0.9, zeta = 0.001, epsilon = 0.0001, const = 0.001, s_m = 8):
         self.replay_buffer = []
         self.n_neighbors=n_neighbors
         #self.nbrs = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm='ball_tree')
