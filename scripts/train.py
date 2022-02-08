@@ -52,6 +52,8 @@ parser.add_argument("--trajectory_updates_per_evo_updates", type=int, default=10
                     help="number of evolutionary steps before trajectories get added to the buffer")
 parser.add_argument("--random_samples", type=int, default=6,
                     help="number of initial random samples for trajectory buffer. Must be lower than number of outer workers")
+parser.add_argument("--top_trajectories", type=int, default=2,
+                    help="number of top trajectories added to buffer per rew_gen_update. Note top trajectoeries are only added to the knn every trajectory_updates_per_evo_updates")
 
 ## Parameters for main algorithm
 parser.add_argument("--epochs", type=int, default=4,
@@ -169,7 +171,7 @@ master_rew_gen = RewGenNet(512,device)
 master_RND_model = RNDModelNet(device)
 #load parameters of just one agent
 for i in range(0,args.outer_workers):
-        rew_gen_list[i].load_state_dict(master_rew_gen.state_dict())
+        rew_gen_list[i].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
         RND_list[i].load_state_dict(master_RND_model.state_dict())
 #initalize noise
 for i in range(0,args.outer_workers):
@@ -310,7 +312,7 @@ while num_frames < args.frames:
             master_rew_gen.update_weights(rew_gen_weight_updates)
             #update weights of each agent with master weights and initialize new noise
             for ii in range(0,args.outer_workers):
-                algos_list[ii].rew_gen_model.load_state_dict(master_rew_gen.state_dict())
+                algos_list[ii].rew_gen_model.load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
                 algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
             # add trajectories to buffer
             best_agent_index = torch.argmax(rollout_diversity_eval)
@@ -320,7 +322,8 @@ while num_frames < args.frames:
             if hasattr(preprocess_obss, "vocab"):
                     status["vocab"] = preprocess_obss.vocab.vocab
             utils.save_status(status, model_dir,i, best = True, update = update)
-            top_trajectories_indexes = torch.topk(rollout_diversity_eval,2)[1]
+            top_trajectories_indexes = torch.topk(rollout_diversity_eval,args.top_trajectories)[1]
+            print(top_trajectories_indexes.shape)
             for ii in range(0,top_trajectories_indexes.shape[0]):
                 index = int(top_trajectories_indexes[ii].item())
                 best_trajectories_list.append(trajectories_list[index])
@@ -329,10 +332,9 @@ while num_frames < args.frames:
                     episodic_buffer.add_state(item.squeeze())
                 best_trajectories_list = []
             evo_updates += 1
-            print('evolutionary update complete')
+            txt_logger.info('evolutionary update complete')
             evol_end_time = time.time()
-            print("computation_time")
-            print(evol_end_time-evol_start_time)
+            txt_logger.info("computation_time_{0}".format(evol_end_time-evol_start_time))
             #deal with policy weights (currently reset the weights to random ones)
             for ii in range(0,args.outer_workers):
                 algos_list[ii].acmodel.load_state_dict(policy_agent_params_list[ii])

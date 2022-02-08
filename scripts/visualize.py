@@ -33,6 +33,10 @@ parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model")
 parser.add_argument("--agent_id", type=int, default=0,
                     help="agent id to run visualisation on")
+parser.add_argument("--best", action = "store_true", default=False,
+                    help="deteremine if run the best agent")
+parser.add_argument("--update", type=int, default=60,
+                    help="determine from which update to take best agent")
 
 args = parser.parse_args()
 # Set seed for all randomness sources
@@ -47,13 +51,14 @@ print(f"Device: {device}\n")
 
 env = utils.make_env(args.env, args.seed)
 for _ in range(args.shift):
+    env.seed(120)
     env.reset()
 print("Environment loaded\n")
 
 # Load agent
 model_dir = utils.get_model_dir(args.model)
 agent = utils.Agent(env.observation_space, env.action_space, model_dir,
-                    argmax=args.argmax, use_memory=args.memory, use_text=args.text, agent_id = args.agent_id)
+                    argmax=args.argmax, use_memory=args.memory, use_text=args.text, agent_id = args.agent_id, best = args.best, update = args.update)
 print("Agent loaded\n")
 
 #load random rew_gen and rnd, it doesn't matter for visualisation
@@ -65,13 +70,17 @@ if args.gif:
    from array2gif import write_gif
    frames = []
    #add agent_id to name
-   args.gif =args.gif+'_{0}'.format(args.agent_id)
+   if args.best:
+        args.gif =args.gif+'_best_u_{0}'.format(args.update)     
+   else:
+        args.gif =args.gif+'_{0}'.format(args.agent_id)
 
 # Create a window to view the environment
 env.render('human')
 
 for episode in range(args.episodes):
     print('episode {0}'.format(episode))
+    env.seed(120)
     obs = env.reset()
 
     while True:
