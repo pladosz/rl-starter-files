@@ -18,7 +18,11 @@ import time
 import torch
 import copy
 import time
+#disable torch debugs for extra speed
 torch.backends.cudnn.benchmark=True
+torch.autograd.set_detect_anomaly(False)
+torch.autograd.profiler.profile(enabled=False)
+torch.autograd.profiler.emit_nvtx(False)
 
 # Parse arguments
 
@@ -81,7 +85,7 @@ parser.add_argument("--optim-alpha", type=float, default=0.99,
                     help="RMSprop optimizer alpha (default: 0.99)")
 parser.add_argument("--clip-eps", type=float, default=0.2,
                     help="clipping epsilon for PPO (default: 0.2)")
-parser.add_argument("--recurrence", type=int, default=4,
+parser.add_argument("--recurrence", type=int, default=8,
                     help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model to handle text input")
