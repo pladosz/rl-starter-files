@@ -181,6 +181,11 @@ for i in range(0,args.outer_workers):
 #initalize noise
 for i in range(0,args.outer_workers):
     rew_gen_list[i].randomly_mutate(args.noise_std)
+#sanity check
+agent_to_copy = 5
+for i in range(0,args.outer_workers):
+    if i != agent_to_copy:
+        rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
 episodic_buffer = Episodic_buffer()
 #save inital random state of each policy agent
 policy_agent_params_list = []
@@ -287,9 +292,13 @@ while num_frames < args.frames:
                 random_agent_id = torch.randint(0,args.outer_workers,(1,1)).item()
                 random_trajectory = trajectories_list[random_agent_id]
                 episodic_buffer.add_state(random_trajectory)
+            #compute averge to stop first solution exploding
+            for ii in range(0,args.outer_workers):
+                episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
+            episodic_buffer.compute_new_average()
             print('random trajectories added')
         #do evolutionary update
-        if update % args.updates_per_evo_update == 0 and i == args.outer_workers-1:
+        if  False:#update % args.updates_per_evo_update == 0 and i == args.outer_workers-1:
             #eval interactions with env
             #collect trajectories
             trajectories_list = []

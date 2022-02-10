@@ -74,7 +74,8 @@ class RNDModelNet(torch.nn.Module):
     def get_state_rep(self, obs):
         obs = torch.tensor(obs).to(self.device)
         #obs = self.compress_frames(obs)
-        target_feature = self.target(obs).detach()
+        with torch.no_grad():
+            target_feature = self.target(obs).detach()
         return target_feature
 
     def extract_frames(self, obs):
