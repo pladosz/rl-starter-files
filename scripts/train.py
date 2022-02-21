@@ -153,8 +153,8 @@ txt_logger.info("Observations preprocessor loaded")
 acmodels_list = []
 for i in range(0,args.outer_workers):
     acmodel = ACModel(obs_space, envs_list[0][0].action_space, args.mem, args.text)
-    if "model_state" in status:
-        acmodel.load_state_dict(status["model_state"])
+    #if "model_state" in status:
+    #    acmodel.load_state_dict(status["model_state"])
     acmodel.to(device)
     txt_logger.info("Model {0} loaded\n".format(i))
     txt_logger.info("{}\n".format(acmodel))
@@ -167,25 +167,26 @@ RND_list = []
 best_trajectories_list = []
 evo_updates = 0
 for i in range(0, args.outer_workers):
-    rew_gen = RewGenNet(512,device)
+    rew_gen = RewGenNet(512, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(512,device)
+master_rew_gen = RewGenNet(512, device)
 master_RND_model = RNDModelNet(device)
 #load parameters of just one agent
 for i in range(0,args.outer_workers):
         rew_gen_list[i].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
-        RND_list[i].load_state_dict(master_RND_model.state_dict())
+        RND_list[i].load_state_dict(copy.deepcopy(master_RND_model.state_dict()))
 #initalize noise
 for i in range(0,args.outer_workers):
     rew_gen_list[i].randomly_mutate(args.noise_std)
 #sanity check
-agent_to_copy = 5
+agent_to_copy = 0
 for i in range(0,args.outer_workers):
     if i != agent_to_copy:
         rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
+        RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
 episodic_buffer = Episodic_buffer()
 #save inital random state of each policy agent
 policy_agent_params_list = []
@@ -271,7 +272,7 @@ while num_frames < args.frames:
             csv_file.flush()
 
             for field, value in zip(header, data):
-                tb_writer.add_scalars(field, {'agent_id_{0}'.format(i):value}, num_frames)        
+                tb_writer.add_scalars(field, {'agent_id_{0}'.format(i):value}, num_frames)   
 
             if args.save_interval > 0 and update % args.save_interval == 0:
                 status = {"num_frames": num_frames, "update": update,

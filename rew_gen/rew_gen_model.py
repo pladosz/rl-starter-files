@@ -21,7 +21,7 @@ class RewGenNet(torch.nn.Module):
         self.fc_layer_1 = torch.nn.Linear(state_representation_size, 256)
         self.fc_layer_2 = torch.nn.Linear(256, 128)
         self.fc_layer_3 = torch.nn.Linear(128, 64)
-        self.memory_layer = torch.nn.RNN(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
+        self.memory_layer = torch.nn.GRU(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
         #self.memory_layer = torch.nn.Linear(64, 32)
         self.fc_layer_4 = torch.nn.Linear(32, 1)
         self.to(self.device)
