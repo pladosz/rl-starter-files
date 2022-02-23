@@ -35,9 +35,9 @@ class Agent:
 
         with torch.no_grad():
             if self.acmodel.recurrent:
-                dist, _, self.memories = self.acmodel(preprocessed_obss, self.memories)
+                dist, _,_, self.memories = self.acmodel(preprocessed_obss, self.memories)
             else:
-                dist, _ = self.acmodel(preprocessed_obss)
+                dist, _,_ = self.acmodel(preprocessed_obss)
 
         if self.argmax:
             actions = dist.probs.max(1, keepdim=True)[1]

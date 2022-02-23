@@ -187,6 +187,7 @@ for i in range(0,args.outer_workers):
     if i != agent_to_copy:
         rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
         RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
+        acmodels_list[i].load_state_dict(copy.deepcopy(acmodels_list[agent_to_copy].state_dict()))
 episodic_buffer = Episodic_buffer()
 #save inital random state of each policy agent
 policy_agent_params_list = []

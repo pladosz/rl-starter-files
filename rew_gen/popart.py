@@ -41,23 +41,29 @@ class PopArtLayer(torch.nn.Module):
 
         return [output, normalized_output]
 
-    def update_parameters(self, vs, task):
+    def update_parameters(self, vs):
 
-        oldmu = self.mu
-        oldsigma = self.sigma
+        self.oldmu = self.mu
+        self.oldsigma = self.sigma
 
-        vs = vs * task
-        n = task.sum((0, 1))
-        mu = vs.sum((0, 1)) / n
-        nu = torch.sum(vs**2, (0, 1)) / n
+        #vs = vs * task
+        n = vs.shape[0]
+        mu = vs.sum() / n
+        nu = torch.sum(vs**2) / n
         sigma = torch.sqrt(nu - mu**2)
         sigma = torch.clamp(sigma, min=1e-4, max=1e+6)
 
-        mu[torch.isnan(mu)] = self.mu[torch.isnan(mu)]
-        sigma[torch.isnan(sigma)] = self.sigma[torch.isnan(sigma)]
+        #TODO fix nan check
+        if torch.isnan(mu):
+            mu = self.mu
+        if torch.isnan(sigma):
+            sigma = self.sigma
+        #mu[torch.isnan(mu)] = self.mu[torch.isnan(mu)]
+        #sigma[torch.isnan(sigma)] = self.sigma[torch.isnan(sigma)]
 
         self.mu = (1 - self.beta) * self.mu + self.beta * mu
         self.sigma = (1 - self.beta) * self.sigma + self.beta * sigma
 
-        self.weight.data = (self.weight.t() * oldsigma / self.sigma).t()
-        self.bias.data = (oldsigma * self.bias + oldmu - self.mu) / self.sigma
+    def normalize_weights(self):
+        self.weight.data = (self.weight.t() * self.oldsigma / self.sigma).t()
+        self.bias.data = (self.oldsigma * self.bias + self.oldmu - self.mu) / self.sigma
