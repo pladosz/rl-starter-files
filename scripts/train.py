@@ -19,10 +19,11 @@ import torch
 import copy
 import time
 #disable torch debugs for extra speed
-torch.backends.cudnn.benchmark=True
 torch.autograd.set_detect_anomaly(False)
 torch.autograd.profiler.profile(enabled=False)
 torch.autograd.profiler.emit_nvtx(False)
+torch.backends.cudnn.deterministic = True
+#torch.backends.cudnn.benchmark = False
 
 # Parse arguments
 
@@ -128,6 +129,7 @@ txt_logger.info(f"Device: {device}\n")
 #create multiple envs
 envs_list = []
 for i in range(0,args.outer_workers):
+    utils.seed(args.seed)
     envs = []
     for i in range(args.procs):
         envs.append(utils.make_env(args.env, args.seed + 10000 * i))
@@ -152,6 +154,7 @@ txt_logger.info("Observations preprocessor loaded")
 # Load model
 acmodels_list = []
 for i in range(0,args.outer_workers):
+    utils.seed(args.seed)
     acmodel = ACModel(obs_space, envs_list[0][0].action_space, args.mem, args.text)
     #if "model_state" in status:
     #    acmodel.load_state_dict(status["model_state"])
@@ -167,6 +170,7 @@ RND_list = []
 best_trajectories_list = []
 evo_updates = 0
 for i in range(0, args.outer_workers):
+    utils.seed(args.seed)
     rew_gen = RewGenNet(512, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
@@ -174,19 +178,20 @@ for i in range(0, args.outer_workers):
 #initialise master rew gen and master RND
 master_rew_gen = RewGenNet(512, device)
 master_RND_model = RNDModelNet(device)
-#load parameters of just one agent
+##load parameters of just one agent
 for i in range(0,args.outer_workers):
         rew_gen_list[i].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
         RND_list[i].load_state_dict(copy.deepcopy(master_RND_model.state_dict()))
 #initalize noise
 for i in range(0,args.outer_workers):
     rew_gen_list[i].randomly_mutate(args.noise_std)
-#sanity check
-agent_to_copy = 0
+#copy one policy for all inner agents
+agent_to_copy = 3
 for i in range(0,args.outer_workers):
+    utils.seed(args.seed)
     if i != agent_to_copy:
-        rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
-        RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
+#        rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
+#        RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
         acmodels_list[i].load_state_dict(copy.deepcopy(acmodels_list[agent_to_copy].state_dict()))
 episodic_buffer = Episodic_buffer()
 #save inital random state of each policy agent
@@ -197,6 +202,7 @@ for i in range(0, args.outer_workers):
 # Load algo
 algos_list = []
 for i in range(0,args.outer_workers):
+    utils.seed(args.seed)
     if args.algo == "a2c":
         algos_list.append(torch_ac.A2CAlgo(envs_list[i], acmodels_list[i], rew_gen_list[i], RND_list[i], device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
@@ -218,9 +224,9 @@ update = status["update"]
 start_time = time.time()
 evol_start_time = time.time()
 while num_frames < args.frames:
-    # Update model parameters
-
     for i in range(0,args.outer_workers):
+        #fix seeds for all the agents
+        utils.seed(args.seed+update*542)
         update_start_time = time.time()
         exps, logs1 = algos_list[i].collect_experiences()
         logs2 = algos_list[i].update_parameters(exps)
@@ -229,8 +235,8 @@ while num_frames < args.frames:
         #delete after update
         exps = None
         logs1 = None
-        #only upodate frames for 1st agent
-        if i == 0:
+        #only upodate frames for last agent
+        if i == args.outer_workers-1:
             num_frames += logs["num_frames"]
             update += 1
         
@@ -300,7 +306,7 @@ while num_frames < args.frames:
             episodic_buffer.compute_new_average()
             print('random trajectories added')
         #do evolutionary update
-        if  False:#update % args.updates_per_evo_update == 0 and i == args.outer_workers-1:
+        if  update % args.updates_per_evo_update == 0 and i == args.outer_workers-1:
             #eval interactions with env
             #collect trajectories
             trajectories_list = []

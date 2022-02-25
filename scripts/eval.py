@@ -33,7 +33,7 @@ class eval:
         RND_model = RND_model
         self.episode_count = 0
         # Run the agent
-        self.trajectory = torch.zeros((3*max_steps_per_episode+3,1))
+        self.trajectory = torch.zeros((4*max_steps_per_episode+4,1))
 
 
     def run(self):
@@ -43,16 +43,17 @@ class eval:
             self.env.seed =120
             self.episode_length_counter =0
             while True:
-                #add trajectory
+                action = self.agent.get_action(obs)
+                obs, reward, done, _ = self.env.step(action)
+                #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
+
                 if self.episode_count < 1:
                     agent_position = torch.tensor(self.env.agent_pos)
                     agent_rotation = torch.tensor(self.env.agent_dir).unsqueeze(0)
-                    agent_state = torch.cat((agent_position,agent_rotation)) 
+                    agent_action = torch.tensor(action)
+                    agent_state = torch.cat((agent_position,agent_rotation, agent_action)) 
                     step_index = int(self.episode_length_counter)
-                    self.trajectory[3*step_index:3*(step_index+1)]=agent_state.unsqueeze(1)
-                action = self.agent.get_action(obs)
-                obs, reward, done, _ = self.env.step(action)
-                self.agent.analyze_feedback(reward, done)
+                    self.trajectory[4*step_index:4*(step_index+1)]=agent_state.unsqueeze(1)
                 if done:
                     break
                 self.episode_length_counter += 1
