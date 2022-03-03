@@ -32,7 +32,7 @@ args = parser.parse_args()
 
 # Set seed for all randomness sources
 
-utils.seed(args.seed)
+#utils.seed(args.seed)
 
 # Set device
 

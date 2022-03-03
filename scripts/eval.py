@@ -15,7 +15,7 @@ class eval:
         self.args = args_debug(env_name, model,agent_id, seed,argmax, pause,shift, gif_dir, episodes, memory, text)
         # Set seed for all randomness sources
 
-        utils.seed(self.args.seed)
+        #utils.seed(self.args.seed)
         # Set device
         # Load environment
         seed = 120

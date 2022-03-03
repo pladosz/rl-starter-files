@@ -91,7 +91,7 @@ for episode in range(args.episodes):
         action = agent.get_action(obs)
         obs, reward, done, _ = env.step(action)
         agent.analyze_feedback(reward, done)
-
+        print(reward)
         if done or env.window.closed:
             break
 

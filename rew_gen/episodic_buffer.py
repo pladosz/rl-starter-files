@@ -44,8 +44,8 @@ class Episodic_buffer():
                 distance=distances[0,i]
                 self.distances_list.append(distance)
             #prevent issue with zero moving average
-            if self.moving_average_distance != 0:
-                distances = distances/self.moving_average_distance
+            #if self.moving_average_distance != 0:
+            #    distances = distances/self.moving_average_distance
             #kill off too small distances
             distances = distances - self.zeta
             distances_too_small_indexes = np.where(distances<0)
