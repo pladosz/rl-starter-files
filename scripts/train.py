@@ -305,8 +305,8 @@ while num_frames < args.frames:
     if update == 0:
         trajectories_list = []
         for ii in range(0,args.outer_workers):
-            evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model.state_dict(), algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory = evaluator.run()
+            evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+            trajectory, _ = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
         sample_number = args.random_samples
         for j in range(0,sample_number):
@@ -328,17 +328,24 @@ while num_frames < args.frames:
         #eval interactions with env
         #collect trajectories
         trajectories_list = []
-        entropy_list = []   
+        entropy_list = [] 
+        episodic_diversity_list = []
         for ii in range(0,args.outer_workers):
-            evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model.state_dict(), algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory = evaluator.run()
+            evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+            trajectory, episodic_diversity = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
+            #normalize diversity with number of steps
+            episodic_diversity_list.append(episodic_diversity/655)
+        print(episodic_diversity_list)
         #compute diversity for each outer worker
         diversity_eval_list = []
+        #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
-            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
+            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])#/10000
             diversity_eval_list.append(diversity)
-        episodic_buffer.compute_new_average()
+        print(diversity_eval_list)
+        exit()
+        #episodic_buffer.compute_new_average()
         rollout_diversity_eval = torch.tensor(diversity_eval_list)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
@@ -427,6 +434,7 @@ while num_frames < args.frames:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
         print(len(algos_list))
+        exit()
         # Train model
                 
         

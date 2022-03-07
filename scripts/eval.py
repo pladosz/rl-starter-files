@@ -9,6 +9,8 @@ from utils.agent_debug import Agent_debug
 from rew_gen.rew_gen_model import RewGenNet
 from rew_gen.RND_model import RNDModelNet
 from utils.args_debug import args_debug
+from rew_gen.episodic_buffer import Episodic_buffer
+
 
 class eval:
     def __init__(self,env_name, model, RND_model, rew_gen_model, agent_id, seed = 0,argmax = False, pause  = 0.1, shift = 0, gif_dir = "test_eval", episodes = 3, memory = True, text = False, max_steps_per_episode = 650):
@@ -34,15 +36,30 @@ class eval:
         self.episode_count = 0
         # Run the agent
         self.trajectory = torch.zeros((4*max_steps_per_episode+4,1))
+        #add episodic experience buffer
+        self.episodic_buffer = Episodic_buffer()
+        self.RND_model = RND_model
+
 
 
     def run(self):
+        episodic_diversity_reward = 0
         for episode in range(self.args.episodes):
             self.env.seed =120
             obs = self.env.reset()
             self.env.seed =120
             self.episode_length_counter =0
+            #vlear episodic buffers and initalize the reward
+            self.episodic_buffer.clear()
             while True:
+                #get current state embedding using RND
+                RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
+                state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                #get episodic diversity
+                eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep)
+                self.episodic_buffer.add_state(state_rep)
+                self.episodic_buffer.compute_new_average()
+                episodic_diversity_reward += eps_div
                 action = self.agent.get_action(obs)
                 obs, reward, done, _ = self.env.step(action)
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
@@ -58,4 +75,4 @@ class eval:
                     break
                 self.episode_length_counter += 1
             self.episode_count += 1
-        return self.trajectory
+        return self.trajectory, episodic_diversity_reward 
