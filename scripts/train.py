@@ -336,17 +336,16 @@ while num_frames < args.frames:
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
             episodic_diversity_list.append(episodic_diversity/655)
-        print(episodic_diversity_list)
         #compute diversity for each outer worker
         diversity_eval_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
-            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])#/10000
+            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/10000
             diversity_eval_list.append(diversity)
-        print(diversity_eval_list)
-        exit()
         #episodic_buffer.compute_new_average()
+        rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_diversity_eval = torch.tensor(diversity_eval_list)
+        rollout_diversity_eval = rollout_diversity_eval * rollout_eps_diversity
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
         noise_tuple = tuple([algo.rew_gen_model.network_noise for algo in algos_list])
