@@ -366,7 +366,7 @@ while num_frames < args.frames:
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
         if evo_updates % args.trajectory_updates_per_evo_updates == 0:
-            txt_logger.info('diversity buffer updated. evo_{0}'.format(evo_updates))
+            txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
             for item in best_trajectories_list:
                 episodic_buffer.add_state(item.squeeze())
             best_trajectories_list = []
