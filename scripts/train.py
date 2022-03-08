@@ -19,6 +19,7 @@ import torch
 import copy
 import time
 import os
+import numpy as np
 from torch_ac.utils import DictList, ParallelEnv
 #disable torch debugs for extra speed
 torch.autograd.set_detect_anomaly(False)
@@ -340,8 +341,11 @@ while num_frames < args.frames:
         diversity_eval_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
-            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/10000
+            diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/100
+            print(diversity*100)
+            diversity = min(max(diversity,1),5)
             diversity_eval_list.append(diversity)
+        print(diversity_eval_list)
         #episodic_buffer.compute_new_average()
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_diversity_eval = torch.tensor(diversity_eval_list)
@@ -416,7 +420,6 @@ while num_frames < args.frames:
             acmodel.to(device)
             acmodel.load_state_dict(copy.deepcopy(master_ACModel_model.state_dict()))
             acmodels_list.append(acmodel)
-        print(len(algos_list))
         for ii in range(0,args.outer_workers):
             utils.seed(args.seed)
             print(ii)
@@ -432,8 +435,6 @@ while num_frames < args.frames:
             else:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
-        print(len(algos_list))
-        exit()
         # Train model
                 
         

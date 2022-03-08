@@ -45,9 +45,9 @@ class eval:
     def run(self):
         episodic_diversity_reward = 0
         for episode in range(self.args.episodes):
-            self.env.seed =120
+            self.env.seed =140
             obs = self.env.reset()
-            self.env.seed =120
+            self.env.seed =140
             self.episode_length_counter =0
             #vlear episodic buffers and initalize the reward
             self.episodic_buffer.clear()
