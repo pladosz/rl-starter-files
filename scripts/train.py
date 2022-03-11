@@ -307,7 +307,7 @@ while num_frames < args.frames:
                     status["vocab"] = preprocess_obss.vocab.vocab
                 utils.save_status(status, model_dir,i)
                 txt_logger.info("Status saved")
-    #add random trajectories to trajectory buffer at the beginning
+    #add dummy trajectories to trajectory buffer at the beginning
     if update == 0:
         trajectories_list = []
         for ii in range(0,args.outer_workers):
@@ -318,11 +318,12 @@ while num_frames < args.frames:
         for j in range(0,sample_number):
             random_agent_id = torch.randint(0,args.outer_workers,(1,1)).item()
             random_trajectory = trajectories_list[random_agent_id]
-            episodic_buffer.add_state(random_trajectory)
+            dummy_trajectory = np.zeros_like(random_trajectory)+100
+            episodic_buffer.add_state(dummy_trajectory)
         #compute averge to stop first solution exploding
-        for ii in range(0,args.outer_workers):
-            episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
-        episodic_buffer.compute_new_average()
+        #for ii in range(0,args.outer_workers):
+        #    episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
+        #episodic_buffer.compute_new_average()
         print('random trajectories added')
     num_frames += logs["num_frames"]
     update += 1
@@ -363,12 +364,8 @@ while num_frames < args.frames:
         noise_tuple = tuple([algo.rew_gen_model.network_noise for algo in algos_list])
         total_noise = torch.cat(noise_tuple, dim = 0)
         noise_effect_sum = torch.einsum('i j, i -> j',total_noise, diversity_ranking.squeeze())
-        print(total_noise.shape)
-        print(diversity_ranking.shape)
-        print(noise_effect_sum.shape)
         best_agent_index = torch.argmax(rollout_diversity_eval)
         rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
-        # add trajectories to buffer
         best_agent_index = torch.argmax(rollout_diversity_eval)
         #for ii in range(0,args.outer_workers):
         #    if ii != best_agent_index:
@@ -381,6 +378,7 @@ while num_frames < args.frames:
         utils.save_status(status, model_dir, i, best = True, update = update)
         top_trajectories_indexes = torch.topk(rollout_diversity_eval,args.top_trajectories)[1]
         print(top_trajectories_indexes.shape)
+        # add trajectories to buffer
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
