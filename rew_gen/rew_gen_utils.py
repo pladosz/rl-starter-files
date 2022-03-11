@@ -16,5 +16,5 @@ def compute_ranking(results_vector,num_workers):
     #apply the utility to the rankings
     ranking_numerator = torch.clamp(math.log(num_workers/2+1) - torch.log(ranking_index), min = 0)
     ranking_denominator = torch.sum(torch.clamp(math.log(num_workers/2+1) - torch.log(ranking_index), min = 0))
-    ranking = ranking_numerator/ranking_denominator #- 1/self.config.num_workers
+    ranking = ranking_numerator/ranking_denominator - 1/num_workers
     return ranking

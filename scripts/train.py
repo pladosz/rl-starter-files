@@ -184,6 +184,7 @@ for i in range(0, args.outer_workers):
 #initialise master rew gen and master RND
 master_rew_gen = RewGenNet(512, device)
 master_RND_model = RNDModelNet(device)
+master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 
 master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
 ##load parameters of just one agent
@@ -193,14 +194,18 @@ for i in range(0,args.outer_workers):
         acmodels_list[i].load_state_dict(copy.deepcopy(master_ACModel_model.state_dict()))
 #initalize noise
 for i in range(0,args.outer_workers):
-    rew_gen_list[i].randomly_mutate(args.noise_std)
+    if i < args.outer_workers/2:
+        rew_gen_list[i].randomly_mutate(args.noise_std, args.outer_workers)
+    else:
+        rew_gen_list[i].network_noise = copy.deepcopy(-rew_gen_list[int(i-args.outer_workers/2)].network_noise)
+        rew_gen_list[i].update_weights(copy.deepcopy(-rew_gen_list[int(i-args.outer_workers/2)].network_noise))
 #copy one policy for all inner agents
-#agent_to_copy = 0
-#for i in range(0,args.outer_workers):
-#    utils.seed(args.seed)
-#    if i != agent_to_copy:
+agent_to_copy = 0
+for i in range(0,args.outer_workers):
+    utils.seed(args.seed)
+    if i != agent_to_copy:
 #        rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
-#        RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
+        RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
         #acmodels_list[i].load_state_dict(copy.deepcopy(acmodels_list[agent_to_copy].state_dict()))
 episodic_buffer = Episodic_buffer()
 #save inital random state of each policy agent
@@ -307,7 +312,7 @@ while num_frames < args.frames:
         trajectories_list = []
         for ii in range(0,args.outer_workers):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, _ = evaluator.run()
+            trajectory, _, _ = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
         sample_number = args.random_samples
         for j in range(0,sample_number):
@@ -333,53 +338,73 @@ while num_frames < args.frames:
         episodic_diversity_list = []
         for ii in range(0,args.outer_workers):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, episodic_diversity = evaluator.run()
+            trajectory, episodic_diversity, repeatability_factor = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
-            episodic_diversity_list.append(episodic_diversity/655)
+            episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
         #compute diversity for each outer worker
+        print('episodic diversity')
+        print(episodic_diversity_list)
         diversity_eval_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
             diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/100
-            print(diversity*100)
-            diversity = min(max(diversity,1),5)
+            diversity = min(max(diversity,0.1),10)
             diversity_eval_list.append(diversity)
-        print(diversity_eval_list)
         #episodic_buffer.compute_new_average()
+        print('diversity eval')
+        print(diversity_eval_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_diversity_eval = torch.tensor(diversity_eval_list)
         rollout_diversity_eval = rollout_diversity_eval * rollout_eps_diversity
+        print(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
         noise_tuple = tuple([algo.rew_gen_model.network_noise for algo in algos_list])
         total_noise = torch.cat(noise_tuple, dim = 0)
         noise_effect_sum = torch.einsum('i j, i -> j',total_noise, diversity_ranking.squeeze())
-        rew_gen_weight_updates = args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
-        ##update weights in rew_gen master
-        master_rew_gen.update_weights(rew_gen_weight_updates)
-        #update weights of each rew gen with master weights and initialize new noise
-        for ii in range(0,args.outer_workers):
-            algos_list[ii].rew_gen_model.load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
-            algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
+        print(total_noise.shape)
+        print(diversity_ranking.shape)
+        print(noise_effect_sum.shape)
+        best_agent_index = torch.argmax(rollout_diversity_eval)
+        rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
         # add trajectories to buffer
         best_agent_index = torch.argmax(rollout_diversity_eval)
+        #for ii in range(0,args.outer_workers):
+        #    if ii != best_agent_index:
+        #        rew_gen_list[ii].network_noise = rew_gen_list[best_agent_index].network_noise
         #save most diverse agent
         status = {"num_frames": num_frames, "update": update,
                     "model_state": algos_list[best_agent_index].acmodel.state_dict(), "optimizer_state": algos_list[best_agent_index].optimizer.state_dict()}
         if hasattr(preprocess_obss, "vocab"):
                 status["vocab"] = preprocess_obss.vocab.vocab
-        utils.save_status(status, model_dir,i, best = True, update = update)
+        utils.save_status(status, model_dir, i, best = True, update = update)
         top_trajectories_indexes = torch.topk(rollout_diversity_eval,args.top_trajectories)[1]
         print(top_trajectories_indexes.shape)
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
-        if evo_updates % args.trajectory_updates_per_evo_updates == 0:
+        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
             txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
             for item in best_trajectories_list:
                 episodic_buffer.add_state(item.squeeze())
             best_trajectories_list = []
+        # Train model
+        ##update weights in rew_gen master
+        #master_rew_gen = RewGenNet(512, device)
+        #master_rew_gen.load_state_dict(copy.deepcopy(master_rew_gen_original))
+        #print(rew_gen_weight_updates)
+        master_rew_gen.update_weights(rew_gen_weight_updates)
+        #print(master_rew_gen.state_dict())
+        #update weights of each rew gen with master weights and initialize new noise
+        for ii in range(0,args.outer_workers):
+            algos_list[ii].rew_gen_model.load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
+            #algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
+            if ii < args.outer_workers/2:
+                rew_gen_list[ii].randomly_mutate(args.noise_std, args.outer_workers)
+            else:
+                rew_gen_list[ii].network_noise = copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise)
+                rew_gen_list[ii].update_weights(copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise))
         evo_updates += 1
         txt_logger.info('evolutionary update complete')
         evol_end_time = time.time()
@@ -391,10 +416,22 @@ while num_frames < args.frames:
         diversity_max = torch.max(rollout_diversity_eval)
         diversity_min = torch.min(rollout_diversity_eval)
         diversity_std = torch.std(rollout_diversity_eval)
+        mean_list = []
+        var_list = []
+        agent_layers = master_rew_gen.state_dict()
+        for layer in agent_layers:
+            mean_layer = agent_layers[layer].mean().cpu().numpy()
+            var_layer = np.square(agent_layers[layer].std().cpu().numpy())
+            mean_list.append(mean_layer)
+            var_list.append(var_layer)
+        weight_mean = np.array(mean_list).mean()
+        weight_std = np.sqrt(np.nanmean(np.array(var_list)))
+        tb_writer.add_scalar('parameters/reward_net_mean_master', weight_mean, num_frames)
+        tb_writer.add_scalar('parameters/reward_net_std_master',weight_std, num_frames)
         tb_writer.add_scalar('diversity/mean',diversity_mean, num_frames)  
         tb_writer.add_scalar('diversity/max',diversity_max, num_frames)  
         tb_writer.add_scalar('diversity/min',diversity_min, num_frames)  
-        tb_writer.add_scalar('diversity/std',diversity_std, num_frames)         
+        tb_writer.add_scalar('diversity/std',diversity_std, num_frames)       
         evol_start_time = time.time()
         # reset the inner agents to start a new episode
         #for ii in range(0,args.outer_workers):
@@ -435,7 +472,6 @@ while num_frames < args.frames:
             else:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
-        # Train model
                 
         
 

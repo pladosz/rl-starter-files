@@ -6,7 +6,8 @@ from utils import device
 
 from rew_gen.rew_gen_model import RewGenNet
 from rew_gen.RND_model import RNDModelNet
-
+from rew_gen.episodic_buffer import Episodic_buffer
+import torch
 
 # Parse arguments
 
@@ -65,6 +66,7 @@ print("Agent loaded\n")
 rew_gen = RewGenNet(512,device)
 RND_model = RNDModelNet(device)
 # Run the agent
+episodic_buffer = Episodic_buffer()
 
 if args.gif:
    from array2gif import write_gif
@@ -87,7 +89,13 @@ for episode in range(args.episodes):
         env.render('human')
         if args.gif:
             frames.append(numpy.moveaxis(env.render("rgb_array"), 2, 0))
-
+        RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
+        state_rep = RND_model.get_state_rep(RND_observation).cpu().numpy()
+        #get episodic diversity
+        eps_div = episodic_buffer.compute_episodic_intrinsic_reward(state_rep)
+        episodic_buffer.add_state(state_rep)
+        episodic_buffer.compute_new_average()
+        print('episodic_diversity_{0}'.format(eps_div))
         action = agent.get_action(obs)
         obs, reward, done, _ = env.step(action)
         agent.analyze_feedback(reward, done)
