@@ -400,6 +400,8 @@ while num_frames < args.frames:
             #algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
             if ii < args.outer_workers/2:
                 rew_gen_list[ii].randomly_mutate(args.noise_std, args.outer_workers)
+            elif ii == args.outer_workers:
+                pass
             else:
                 rew_gen_list[ii].network_noise = copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise)
                 rew_gen_list[ii].update_weights(copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise))
