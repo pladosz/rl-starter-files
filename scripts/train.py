@@ -330,7 +330,8 @@ while num_frames < args.frames:
     #do evolutionary update
     if  update % args.updates_per_evo_update == 0:
         #set new random seed for evo updates
-        print(num_frames)
+        print('random seed')
+        print(args.seed*542+num_frames-update)
         utils.seed(args.seed*542+num_frames-update)
         #eval interactions with env
         #collect trajectories
@@ -346,18 +347,18 @@ while num_frames < args.frames:
         #compute diversity for each outer worker
         print('episodic diversity')
         print(episodic_diversity_list)
-        diversity_eval_list = []
+        global_diversity_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
             diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/100
             diversity = min(max(diversity,0.1),10)
-            diversity_eval_list.append(diversity)
+            global_diversity_list.append(diversity)
         #episodic_buffer.compute_new_average()
         print('diversity eval')
-        print(diversity_eval_list)
+        print(global_diversity_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
-        rollout_diversity_eval = torch.tensor(diversity_eval_list)
-        rollout_diversity_eval = rollout_diversity_eval * rollout_eps_diversity
+        rollout_global_diversity = torch.tensor(global_diversity_list)
+        rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
         print(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
@@ -428,10 +429,28 @@ while num_frames < args.frames:
         weight_std = np.sqrt(np.nanmean(np.array(var_list)))
         tb_writer.add_scalar('parameters/reward_net_mean_master', weight_mean, num_frames)
         tb_writer.add_scalar('parameters/reward_net_std_master',weight_std, num_frames)
-        tb_writer.add_scalar('diversity/mean',diversity_mean, num_frames)  
-        tb_writer.add_scalar('diversity/max',diversity_max, num_frames)  
-        tb_writer.add_scalar('diversity/min',diversity_min, num_frames)  
-        tb_writer.add_scalar('diversity/std',diversity_std, num_frames)       
+        tb_writer.add_scalar('diversity_total/mean',diversity_mean, num_frames)  
+        tb_writer.add_scalar('diversity_total/max',diversity_max, num_frames)  
+        tb_writer.add_scalar('diversity_total/min',diversity_min, num_frames)  
+        tb_writer.add_scalar('diversity_total/std',diversity_std, num_frames) 
+
+        diversity_eps_mean = torch.mean(rollout_eps_diversity)
+        diversity_eps_max = torch.max(rollout_eps_diversity)
+        diversity_eps_min = torch.min(rollout_eps_diversity)
+        diversity_eps_std = torch.std(rollout_eps_diversity)
+        tb_writer.add_scalar('diversity_eps/mean',diversity_eps_mean, num_frames)  
+        tb_writer.add_scalar('diversity_eps/max',diversity_eps_max, num_frames)  
+        tb_writer.add_scalar('diversity_eps/min',diversity_eps_min, num_frames)  
+        tb_writer.add_scalar('diversity_eps/std',diversity_eps_std, num_frames) 
+
+        diversity_global_mean = torch.mean(rollout_global_diversity)
+        diversity_global_max = torch.max(rollout_global_diversity)
+        diversity_global_min = torch.min(rollout_global_diversity)
+        diversity_global_std = torch.std(rollout_global_diversity)
+        tb_writer.add_scalar('diversity_global/mean',diversity_global_mean, num_frames)  
+        tb_writer.add_scalar('diversity_global/max',diversity_global_max, num_frames)  
+        tb_writer.add_scalar('diversity_global/min',diversity_global_min, num_frames)  
+        tb_writer.add_scalar('diversity_global/std',diversity_global_std, num_frames)       
         evol_start_time = time.time()
         # reset the inner agents to start a new episode
         #for ii in range(0,args.outer_workers):
