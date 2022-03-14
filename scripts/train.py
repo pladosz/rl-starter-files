@@ -324,14 +324,12 @@ while num_frames < args.frames:
         #for ii in range(0,args.outer_workers):
         #    episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
         #episodic_buffer.compute_new_average()
-        print('random trajectories added')
+        txt_logger.info('random trajectories added')
     num_frames += logs["num_frames"]
     update += 1
     #do evolutionary update
     if  update % args.updates_per_evo_update == 0:
         #set new random seed for evo updates
-        print('random seed')
-        print(args.seed*542+num_frames-update)
         utils.seed(args.seed*542+num_frames-update)
         #eval interactions with env
         #collect trajectories
@@ -345,8 +343,8 @@ while num_frames < args.frames:
             #normalize diversity with number of steps
             episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
         #compute diversity for each outer worker
-        print('episodic diversity')
-        print(episodic_diversity_list)
+        txt_logger.info('episodic diversity')
+        txt_logger.info(episodic_diversity_list)
         global_diversity_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
@@ -354,12 +352,12 @@ while num_frames < args.frames:
             diversity = min(max(diversity,0.1),10)
             global_diversity_list.append(diversity)
         #episodic_buffer.compute_new_average()
-        print('diversity eval')
-        print(global_diversity_list)
+        txt_logger.info('diversity eval')
+        txt_logger.info(global_diversity_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_global_diversity = torch.tensor(global_diversity_list)
         rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
-        print(rollout_diversity_eval)
+        txt_logger.info(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
         noise_tuple = tuple([algo.rew_gen_model.network_noise for algo in algos_list])
@@ -378,7 +376,6 @@ while num_frames < args.frames:
                 status["vocab"] = preprocess_obss.vocab.vocab
         utils.save_status(status, model_dir, i, best = True, update = update)
         top_trajectories_indexes = torch.topk(rollout_diversity_eval,args.top_trajectories)[1]
-        print(top_trajectories_indexes.shape)
         # add trajectories to buffer
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
@@ -402,6 +399,7 @@ while num_frames < args.frames:
             if ii < args.outer_workers/2:
                 rew_gen_list[ii].randomly_mutate(args.noise_std, args.outer_workers)
             elif ii == args.outer_workers:
+                rew_gen_list[ii].network_noise = torch.zeros_like(rew_gen_list[ii-1].network_noise)
                 pass
             else:
                 rew_gen_list[ii].network_noise = copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise)
