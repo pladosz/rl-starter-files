@@ -330,7 +330,7 @@ while num_frames < args.frames:
     #do evolutionary update
     if  update % args.updates_per_evo_update == 0:
         #set new random seed for evo updates
-        utils.seed(args.seed*542+num_frames-update)
+        utils.seed(args.seed*542+num_frames-evo_updates)
         #eval interactions with env
         #collect trajectories
         trajectories_list = []
@@ -364,6 +364,11 @@ while num_frames < args.frames:
         total_noise = torch.cat(noise_tuple, dim = 0)
         noise_effect_sum = torch.einsum('i j, i -> j',total_noise, diversity_ranking.squeeze())
         best_agent_index = torch.argmax(rollout_diversity_eval)
+        #if evo_updates == 0:
+        #    args.rew_gen_lr = 0.5
+        #else:
+        #    args.rew_gen_lr = 0.01
+        txt_logger.info(args.rew_gen_lr)
         rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
         best_agent_index = torch.argmax(rollout_diversity_eval)
         #for ii in range(0,args.outer_workers):
