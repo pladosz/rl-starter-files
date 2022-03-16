@@ -8,6 +8,7 @@ from rew_gen.rew_gen_model import RewGenNet
 from rew_gen.RND_model import RNDModelNet
 from rew_gen.episodic_buffer import Episodic_buffer
 from rew_gen.rew_gen_utils import compute_ranking
+from rew_gen.rew_gen_utils import two_point_adaptation
 
 import utils
 from utils import device
@@ -64,6 +65,17 @@ parser.add_argument("--random_samples", type=int, default=6,
                     help="number of initial random samples for trajectory buffer. Must be lower than number of outer workers")
 parser.add_argument("--top_trajectories", type=int, default=2,
                     help="number of top trajectories added to buffer per rew_gen_update. Note top trajectoeries are only added to the knn every trajectory_updates_per_evo_updates")
+parser.add_argument("--TPA_agents", type=int, default=2,
+                    help="numbers of agent for TPA step update. Note 2 only is currently supported. PArameter for future extension")
+parser.add_argument("--alpha", type=float, default=0.5,
+                    help="step size decrease factor. Note must be smaller than 1, otherwise step size diverges")
+parser.add_argument("--beta", type=float, default=1/0.5,
+                    help="step size increase factor (nromally set as 1/alpha, compute manually)")
+parser.add_argument("--d_sigma", type=float, default=1,
+                    help="TPA sigma update normalization")
+parser.add_argument("--c_z", type=float, default=0.5,
+                    help="TPA running average coeffecient")
+
 
 ## Parameters for main algorithm
 parser.add_argument("--epochs", type=int, default=4,
@@ -143,10 +155,10 @@ for ii in range(0,args.outer_workers):
 
 # Load training status
 
-try:
-    status = utils.get_status(model_dir)
-except OSError:
-    status = {"num_frames": 0, "update": 0}
+#try:
+#    status = utils.get_status(model_dir)
+#except OSError:
+status = {"num_frames": 0, "update": 0}
 txt_logger.info("Training status loaded\n")
 
 # Load observations preprocessor
@@ -170,7 +182,7 @@ for i in range(0,args.outer_workers):
     acmodels_list.append(acmodel)
 
 
-#initailize rew_gen, state representer and episodic buffer
+#initailize rew_gen, state representer, episodic buffer and TPA averaging
 rew_gen_list = []
 RND_list = []
 best_trajectories_list = []
@@ -185,6 +197,7 @@ for i in range(0, args.outer_workers):
 master_rew_gen = RewGenNet(512, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
+z = args.rew_gen_lr
 
 master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
 ##load parameters of just one agent
@@ -368,7 +381,12 @@ while num_frames < args.frames:
         #    args.rew_gen_lr = 0.5
         #else:
         #    args.rew_gen_lr = 0.01
-        txt_logger.info(args.rew_gen_lr)
+        #determine best ste size
+        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z)
+        print('rew_gen_lr')
+        print(args.rew_gen_lr)
+        args.rew_gen_lr = new_rew_gen_lr
+        txt_logger.info('new step size {0}'.format(args.rew_gen_lr))
         rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
         best_agent_index = torch.argmax(rollout_diversity_eval)
         #for ii in range(0,args.outer_workers):
@@ -453,7 +471,9 @@ while num_frames < args.frames:
         tb_writer.add_scalar('diversity_global/mean',diversity_global_mean, num_frames)  
         tb_writer.add_scalar('diversity_global/max',diversity_global_max, num_frames)  
         tb_writer.add_scalar('diversity_global/min',diversity_global_min, num_frames)  
-        tb_writer.add_scalar('diversity_global/std',diversity_global_std, num_frames)       
+        tb_writer.add_scalar('diversity_global/std',diversity_global_std, num_frames)
+
+        tb_writer.add_scalar('evo_step_size', args.rew_gen_lr, num_frames)        
         evol_start_time = time.time()
         # reset the inner agents to start a new episode
         #for ii in range(0,args.outer_workers):
