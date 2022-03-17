@@ -116,12 +116,14 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         acmodels_list[i].load_state_dict(
             copy.deepcopy(master_ACModel_model.state_dict()))
     # initalize noise for TPA
+    factor_matrix = []
     for i in range(0, args.TPA_agents):
         if i == 0:
             rew_gen_list[i].network_noise = copy.deepcopy(
-                args.alpha*args.rew_gen_lr*weights_updates)
+                2*args.beta*args.rew_gen_lr*weights_updates)
             rew_gen_list[i].update_weights(
-                copy.deepcopy(args.alpha*args.rew_gen_lr*weights_updates))
+                copy.deepcopy(2*args.beta*args.rew_gen_lr*weights_updates))
+            factor_matrix.append(2*args.beta)
         #if i == 1:
         #    rew_gen_list[i].network_noise = copy.deepcopy(
         #        weights_updates)
@@ -132,11 +134,25 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
                 args.beta*args.rew_gen_lr*weights_updates)
             rew_gen_list[i].update_weights(
                 copy.deepcopy(args.beta*args.rew_gen_lr*weights_updates))
+            factor_matrix.append(args.beta)
+        elif i == 2:
+            rew_gen_list[i].network_noise = copy.deepcopy(
+                args.alpha*args.rew_gen_lr*weights_updates)
+            rew_gen_list[i].update_weights(
+                copy.deepcopy(args.alpha*args.rew_gen_lr*weights_updates))
+            factor_matrix.append(args.alpha)
+        elif i == 3:
+            rew_gen_list[i].network_noise = copy.deepcopy(
+                0.5*args.alpha*args.rew_gen_lr*weights_updates)
+            rew_gen_list[i].update_weights(
+                copy.deepcopy(0.5*args.alpha*args.rew_gen_lr*weights_updates))
+            factor_matrix.append(0.5*args.alpha)
         else:
             print('you defined extra TPA agents but did not define what to do with them. fix it. Exiting!')
             print(i)
             print(args.TPA_agents)
             exit()
+    factor_matrix = torch.tensor(factor_matrix)
     # copy one policy for all inner agents
     agent_to_copy = 0
     for i in range(0, args.TPA_agents):
@@ -259,26 +275,37 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         diversity = min(max(diversity,0.1),10)
         global_diversity_list.append(diversity)
     #episodic_buffer.compute_new_average()
-    txt_logger.info('diversity eval TPA')
+    txt_logger.info('global diversity')
     txt_logger.info(global_diversity_list)
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)
     rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
+    txt_logger.info('diversity eval TPA')
     txt_logger.info(rollout_diversity_eval)
     #compute step update
-    txt_logger.info(rollout_diversity_eval)
-    txt_logger.info(int(rollout_diversity_eval[0].item()<rollout_diversity_eval[1].item()))
-    txt_logger.info(int(rollout_diversity_eval[0].item()>=rollout_diversity_eval[1].item()))
-    z = (1-args.c_z)*z + args.c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + args.c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
+    best_agent = torch.argmax(rollout_diversity_eval)
+    step_update_factor = factor_matrix[best_agent].item()
+    txt_logger.info(step_update_factor)
+    _,count = torch.unique(rollout_diversity_eval, return_counts = True)
+    txt_logger.info(rollout_diversity_eval.shape)
+    if torch.max(count) == rollout_diversity_eval.shape[0]:
+        txt_logger.info('all outputs equal!')
+        step_update_factor = torch.max(factor_matrix).item()
+    #txt_logger.info(int(rollout_diversity_eval[0].item()<rollout_diversity_eval[1].item()))
+    #txt_logger.info(int(rollout_diversity_eval[0].item()>=rollout_diversity_eval[1].item()))
+    z = (1-args.c_z)*z + args.c_z*math.log(step_update_factor)
+    #z = (1-args.c_z)*z + args.c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + args.c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
     #hard limit on step size to prevent network saturation
-    if z > 10:
-        z = 10
+    if z > 2.5:
+        z = 2.5
     txt_logger.info('z')
     txt_logger.info(z)
-    #if rollout_diversity_eval[0] == rollout_diversity_eval[1]:
+    #if rollout_diversity_eval[0] == rollout_diveoh this isrsity_eval[1]:
     #    new_rew_gen_lr = args.rew_gen_lr
     #else:
     new_rew_gen_lr = args.rew_gen_lr*math.exp(z/args.d_sigma)
+    if new_rew_gen_lr > 7:
+        new_rew_gen_lr = 7
     # clear models
     for ii in range(0,args.TPA_agents):
         algos_list[ii].reset()

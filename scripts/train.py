@@ -67,9 +67,9 @@ parser.add_argument("--top_trajectories", type=int, default=2,
                     help="number of top trajectories added to buffer per rew_gen_update. Note top trajectoeries are only added to the knn every trajectory_updates_per_evo_updates")
 parser.add_argument("--TPA_agents", type=int, default=2,
                     help="numbers of agent for TPA step update. Note 2 only is currently supported. PArameter for future extension")
-parser.add_argument("--alpha", type=float, default=0.5,
+parser.add_argument("--alpha", type=float, default=0.4,
                     help="step size decrease factor. Note must be smaller than 1, otherwise step size diverges")
-parser.add_argument("--beta", type=float, default=1/0.5,
+parser.add_argument("--beta", type=float, default=1/0.4,
                     help="step size increase factor (nromally set as 1/alpha, compute manually)")
 parser.add_argument("--d_sigma", type=float, default=1,
                     help="TPA sigma update normalization")
