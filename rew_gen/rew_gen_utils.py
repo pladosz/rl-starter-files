@@ -1,3 +1,4 @@
+from unicodedata import decimal
 import torch
 import os
 import numpy as np
@@ -281,14 +282,17 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     rollout_global_diversity = torch.tensor(global_diversity_list)
     rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
     txt_logger.info('diversity eval TPA')
-    txt_logger.info(rollout_diversity_eval)
     #compute step update
     best_agent = torch.argmax(rollout_diversity_eval)
     step_update_factor = factor_matrix[best_agent].item()
     txt_logger.info(step_update_factor)
-    _,count = torch.unique(rollout_diversity_eval, return_counts = True)
+    rollout_diversity_eval = rollout_diversity_eval.numpy()
+    rollout_diversity_eval = np.round(rollout_diversity_eval, 5)
+    txt_logger.info(rollout_diversity_eval)
+    _,count = np.unique(rollout_diversity_eval, return_counts = True)
     txt_logger.info(rollout_diversity_eval.shape)
-    if torch.max(count) == rollout_diversity_eval.shape[0]:
+    txt_logger.info(count)
+    if np.max(count) == rollout_diversity_eval.shape[0]:
         txt_logger.info('all outputs equal!')
         step_update_factor = torch.max(factor_matrix).item()
     #txt_logger.info(int(rollout_diversity_eval[0].item()<rollout_diversity_eval[1].item()))
