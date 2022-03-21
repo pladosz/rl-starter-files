@@ -153,6 +153,19 @@ for ii in range(0,args.outer_workers):
     envs_list.append(envs)
     txt_logger.info("Environments loaded\n")
 
+# create TPA environments
+
+envs_list_TPA = []
+for ii in range(0,args.TPA_agents):
+    
+    utils.seed(args.seed)
+    envs = []
+    for i in range(args.procs):
+        envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+    envs_list_TPA.append(envs)
+    txt_logger.info("TPA Environments loaded\n")
+
+
 # Load training status
 
 #try:
@@ -168,6 +181,18 @@ if "vocab" in status:
     preprocess_obss.vocab.load_vocab(status["vocab"])
 txt_logger.info("Observations preprocessor loaded")
 
+#load TPA preprocessor
+
+obs_space_TPA, preprocess_obss_TPA = utils.get_obss_preprocessor(envs_list_TPA[0][0].observation_space)
+if "vocab" in status:
+    preprocess_obss_TPA.vocab.load_vocab(status["vocab"])
+txt_logger.info("TPA Observations preprocessor loaded")
+action_space_TPA = envs_list_TPA[0][0].action_space
+
+#parallerized TPA envs:
+for i in range(0, args.TPA_agents):
+    envs_list_TPA[i] = ParallelEnv(envs_list_TPA[i])
+
 action_space = envs_list[0][0].action_space
 # Load model
 acmodels_list = []
@@ -178,7 +203,7 @@ for i in range(0,args.outer_workers):
     #    acmodel.load_state_dict(status["model_state"])
     acmodel.to(device)
     txt_logger.info("Model {0} loaded\n".format(i))
-    txt_logger.info("{}\n".format(acmodel))
+    #txt_logger.info("{}\n".format(acmodel))
     acmodels_list.append(acmodel)
 
 
@@ -382,7 +407,9 @@ while num_frames < args.frames:
         #else:
         #    args.rew_gen_lr = 0.01
         #determine best ste size
-        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z)
+        for env in envs_list_TPA:
+            env.reset()
+        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA)
         print('rew_gen_lr')
         print(args.rew_gen_lr)
         args.rew_gen_lr = new_rew_gen_lr

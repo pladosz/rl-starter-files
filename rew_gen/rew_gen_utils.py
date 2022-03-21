@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from unicodedata import decimal
 import torch
 import os
@@ -56,26 +57,16 @@ def compute_ranking(results_vector, num_workers):
     return ranking
 
 
-def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights, RND_weights, episodic_buffer, txt_logger, z):
+def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights, RND_weights, episodic_buffer, txt_logger, z, envs_list_TPA, obs_space, preprocess_obss, action_space):
     # create multiple envs
     status = {"num_frames": 0, "update": 0}
-    envs_list = []
-    for ii in range(0, args.TPA_agents):
-        utils.seed(args.seed)
-        envs = []
-        for i in range(args.procs):
-            envs.append(utils.make_env(args.env, args.seed + 10000 * i))
-        envs_list.append(envs)
-        txt_logger.info("Environments loaded\n")
-    obs_space, preprocess_obss = utils.get_obss_preprocessor(
-        envs_list[0][0].observation_space)
+    envs_list = envs_list_TPA
 
 
     if "vocab" in status:
         preprocess_obss.vocab.load_vocab(status["vocab"])
         txt_logger.info("Observations preprocessor loaded")
 
-    action_space = envs_list[0][0].action_space
     # Load model
     acmodels_list = []
     for i in range(0, args.TPA_agents):
@@ -85,7 +76,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         #    acmodel.load_state_dict(status["model_state"])
         acmodel.to(device)
         txt_logger.info("Model {0} loaded\n".format(i))
-        txt_logger.info("{}\n".format(acmodel))
+        #txt_logger.info("{}\n".format(acmodel))
         acmodels_list.append(acmodel)
 
 
@@ -175,20 +166,16 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         utils.seed(args.seed)
         print(i)
         #parallelrize the envs:
-        envs_list[i] = ParallelEnv(envs_list[i])
         if args.algo == "a2c":
             algos_list.append(torch_ac.A2CAlgo(envs_list[i], acmodels_list[i], rew_gen_list[i], RND_list[i], args.procs, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                            args.optim_alpha, args.optim_eps, preprocess_obss))
+                            args.optim_alpha, args.optim_eps, preprocess_obss, txt_logger = txt_logger))
         elif args.algo == "ppo":
             algos_list.append(torch_ac.PPOAlgo(envs_list[i], acmodels_list[i], rew_gen_list[i], RND_list[i], args.procs, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss, agent_id = i))
         else:
             raise ValueError("Incorrect algorithm name: {}".format(args.algo))
-
-        if "optimizer_state" in status:
-            algos_list[i].optimizer.load_state_dict(status["optimizer_state"])
         txt_logger.info("Optimizer loaded\n")
     # Train model
     num_frames = status["num_frames"]
@@ -313,7 +300,6 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     # clear models
     for ii in range(0,args.TPA_agents):
         algos_list[ii].reset()
-        #algos_list[ii].env.close()
     acmodels_list.clear()
     algos_list.clear()
     algos_list = []
