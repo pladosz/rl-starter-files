@@ -297,6 +297,8 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     new_rew_gen_lr = args.rew_gen_lr*math.exp(z/args.d_sigma)
     if new_rew_gen_lr > 7:
         new_rew_gen_lr = 7
+    if new_rew_gen_lr < 0.05:
+        new_rew_gen_lr = 0.05
     # clear models
     for ii in range(0,args.TPA_agents):
         algos_list[ii].reset()
