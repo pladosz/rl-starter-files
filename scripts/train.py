@@ -211,6 +211,7 @@ for i in range(0,args.outer_workers):
 rew_gen_list = []
 RND_list = []
 best_trajectories_list = []
+lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
@@ -289,6 +290,8 @@ while num_frames < args.frames:
         logs2 = algos_list[i].update_parameters(exps)
         logs = {**logs1, **logs2}
         update_end_time = time.time()
+        print(type(sum(logs["return_per_episode"])))
+        lifetime_returns[i] += sum(logs["return_per_episode"])
         #delete after update
         exps = None
         logs1 = None
@@ -394,7 +397,8 @@ while num_frames < args.frames:
         txt_logger.info(global_diversity_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_global_diversity = torch.tensor(global_diversity_list)
-        rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
+        rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
+        rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity + lifetime_returns
         txt_logger.info(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
@@ -516,6 +520,7 @@ while num_frames < args.frames:
         algos_list.clear()
         algos_list = []
         acmodels_list = []
+        lifetime_returns = torch.zeros(args.outer_workers)
         #create new networks
         #obs_space, preprocess_obss = utils.get_obss_preprocessor(envs_list[0][0].observation_space)
         for ii in range(0,args.outer_workers):
