@@ -1,4 +1,5 @@
 from asyncio.log import logger
+from re import U
 from unicodedata import decimal
 import torch
 import os
@@ -56,6 +57,21 @@ def compute_ranking(results_vector, num_workers):
     ranking = ranking_numerator/ranking_denominator - 1/num_workers
     return ranking
 
+def update_weights(update_factor, network, z, args, weights_updates):
+    updated_z = (1-args.c_z)*z + args.c_z*math.log(update_factor)
+    if updated_z > 2.5:
+        updated_z = 2.5
+    candidate_rew_gen_lr = args.rew_gen_lr*math.exp(updated_z/args.d_sigma)
+    if candidate_rew_gen_lr > 7:
+        candidate_rew_gen_lr = 7
+    if candidate_rew_gen_lr < 0.05:
+        candidate_rew_gen_lr = 0.05
+    network.network_noise = copy.deepcopy(
+        candidate_rew_gen_lr*weights_updates)
+    network.update_weights(
+        copy.deepcopy(network.network_noise))
+    return updated_z, update_factor
+
 
 def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights, RND_weights, episodic_buffer, txt_logger, z, envs_list_TPA, obs_space, preprocess_obss, action_space):
     # create multiple envs
@@ -108,13 +124,16 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         acmodels_list[i].load_state_dict(
             copy.deepcopy(master_ACModel_model.state_dict()))
     # initalize noise for TPA
+    #z = (1-args.c_z)*z + args.c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + args.c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
+    #hard limit on step size to prevent network saturation
+    #if rollout_diversity_eval[0] == rollout_diveoh this isrsity_eval[1]:
+    #    new_rew_gen_lr = args.rew_gen_lr
+    #else:
+    
     factor_matrix = []
     for i in range(0, args.TPA_agents):
         if i == 0:
-            rew_gen_list[i].network_noise = copy.deepcopy(
-                2*args.beta*args.rew_gen_lr*weights_updates)
-            rew_gen_list[i].update_weights(
-                copy.deepcopy(2*args.beta*args.rew_gen_lr*weights_updates))
+            update_weights(2*args.beta, rew_gen_list[i], z, args, weights_updates)
             factor_matrix.append(2*args.beta)
         #if i == 1:
         #    rew_gen_list[i].network_noise = copy.deepcopy(
@@ -122,23 +141,14 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         #    rew_gen_list[i].update_weights(
         #        copy.deepcopy(weights_updates))
         elif i == 1:
-            rew_gen_list[i].network_noise = copy.deepcopy(
-                args.beta*args.rew_gen_lr*weights_updates)
-            rew_gen_list[i].update_weights(
-                copy.deepcopy(args.beta*args.rew_gen_lr*weights_updates))
+            update_weights(args.beta, rew_gen_list[i], z, args, weights_updates)
             factor_matrix.append(args.beta)
         elif i == 2:
-            rew_gen_list[i].network_noise = copy.deepcopy(
-                args.alpha*args.rew_gen_lr*weights_updates)
-            rew_gen_list[i].update_weights(
-                copy.deepcopy(args.alpha*args.rew_gen_lr*weights_updates))
+            update_weights(args.alpha, rew_gen_list[i], z, args, weights_updates)
             factor_matrix.append(args.alpha)
         elif i == 3:
-            rew_gen_list[i].network_noise = copy.deepcopy(
-                0.5*args.alpha*args.rew_gen_lr*weights_updates)
-            rew_gen_list[i].update_weights(
-                copy.deepcopy(0.5*args.alpha*args.rew_gen_lr*weights_updates))
-            factor_matrix.append(0.5*args.alpha)
+            update_weights(0.25*args.alpha, rew_gen_list[i], z, args, weights_updates)
+            factor_matrix.append(0.25*args.alpha)
         else:
             print('you defined extra TPA agents but did not define what to do with them. fix it. Exiting!')
             print(i)

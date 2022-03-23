@@ -52,7 +52,7 @@ print(f"Device: {device}\n")
 
 env = utils.make_env(args.env, args.seed)
 for _ in range(args.shift):
-    env.seed(120)
+    env.seed(140)
     env.reset()
 print("Environment loaded\n")
 
@@ -82,7 +82,7 @@ env.render('human')
 
 for episode in range(args.episodes):
     print('episode {0}'.format(episode))
-    env.seed(120)
+    env.seed(140)
     obs = env.reset()
 
     while True:

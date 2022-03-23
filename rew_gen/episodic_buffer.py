@@ -41,6 +41,8 @@ class Episodic_buffer():
             for i in range(0,distances.shape[1]):
                 distance=distances[0,i]
                 self.distances_list.append(distance)
+            #print('distance')
+            #print(distances)
             #prevent issue with zero moving average
             if self.moving_average_distance != 0:
                 distances = distances/self.moving_average_distance
@@ -50,6 +52,8 @@ class Episodic_buffer():
             distances[distances_too_small_indexes] = 0
             K_v = self.epsilon / (distances+self.epsilon)
             similarity = np.sqrt(np.sum(K_v)) + self.const
+            #print('similarity')
+            #print(similarity)
             #if similarity >  self.s_m:
             #    print('error is in the similarity')
             #   print(similarity)
