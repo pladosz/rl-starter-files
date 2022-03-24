@@ -57,13 +57,13 @@ def compute_ranking(results_vector, num_workers):
     ranking = ranking_numerator/ranking_denominator - 1/num_workers
     return ranking
 
-def update_weights(update_factor, network, z, args, weights_updates):
-    updated_z = (1-args.c_z)*z + args.c_z*math.log(update_factor)
-    if updated_z > 2.5:
-        updated_z = 2.5
+def update_weights(update_factor, network, z, args, weights_updates, c_z):
+    updated_z = (1-c_z)*z + c_z*math.log(update_factor)
+    #if updated_z > 2.5:
+    #    updated_z = 2.5
     candidate_rew_gen_lr = args.rew_gen_lr*math.exp(updated_z/args.d_sigma)
-    if candidate_rew_gen_lr > 7:
-        candidate_rew_gen_lr = 7
+    if candidate_rew_gen_lr > 15:
+        candidate_rew_gen_lr = 15
     if candidate_rew_gen_lr < 0.05:
         candidate_rew_gen_lr = 0.05
     network.network_noise = copy.deepcopy(
@@ -124,31 +124,42 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         acmodels_list[i].load_state_dict(
             copy.deepcopy(master_ACModel_model.state_dict()))
     # initalize noise for TPA
-    #z = (1-args.c_z)*z + args.c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + args.c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
+    #z = (1-c_z)*z + c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
     #hard limit on step size to prevent network saturation
     #if rollout_diversity_eval[0] == rollout_diveoh this isrsity_eval[1]:
     #    new_rew_gen_lr = args.rew_gen_lr
     #else:
     
     factor_matrix = []
+    c_z = args.c_z*torch.ones(args.TPA_agents)
     for i in range(0, args.TPA_agents):
         if i == 0:
-            update_weights(2*args.beta, rew_gen_list[i], z, args, weights_updates)
-            factor_matrix.append(2*args.beta)
+            if args.rew_gen_lr < 0.1:
+                c_z[i] = 1.5 * c_z[i]
+                update_weights(6*args.beta, rew_gen_list[i], z, args, weights_updates,c_z[i].item())
+                factor_matrix.append(6*args.beta)
+            else:
+                update_weights(2*args.beta, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
+                factor_matrix.append(2*args.beta)
         #if i == 1:
         #    rew_gen_list[i].network_noise = copy.deepcopy(
         #        weights_updates)
         #    rew_gen_list[i].update_weights(
         #        copy.deepcopy(weights_updates))
         elif i == 1:
-            update_weights(args.beta, rew_gen_list[i], z, args, weights_updates)
+            update_weights(args.beta, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
             factor_matrix.append(args.beta)
         elif i == 2:
-            update_weights(args.alpha, rew_gen_list[i], z, args, weights_updates)
+            update_weights(args.alpha, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
             factor_matrix.append(args.alpha)
         elif i == 3:
-            update_weights(0.25*args.alpha, rew_gen_list[i], z, args, weights_updates)
-            factor_matrix.append(0.25*args.alpha)
+            if args.rew_gen_lr > 3.5:
+                c_z[i] = 1.5 * c_z[i]
+                update_weights(0.01*args.alpha, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
+                factor_matrix.append(0.01*args.alpha)
+            else:
+                update_weights(0.25*args.alpha, rew_gen_list[i], z, args, weights_updates,c_z[i].item())
+                factor_matrix.append(0.25*args.alpha)
         else:
             print('you defined extra TPA agents but did not define what to do with them. fix it. Exiting!')
             print(i)
@@ -282,6 +293,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     #compute step update
     best_agent = torch.argmax(rollout_diversity_eval)
     step_update_factor = factor_matrix[best_agent].item()
+    c_z = c_z[best_agent].item()
     txt_logger.info(step_update_factor)
     rollout_diversity_eval = rollout_diversity_eval.numpy()
     rollout_diversity_eval = np.round(rollout_diversity_eval, 5)
@@ -289,24 +301,26 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     _,count = np.unique(rollout_diversity_eval, return_counts = True)
     txt_logger.info(rollout_diversity_eval.shape)
     txt_logger.info(count)
+
     if np.max(count) == rollout_diversity_eval.shape[0]:
         txt_logger.info('all outputs equal!')
         step_update_factor = torch.max(factor_matrix).item()
+        c_z = args.c_z
     #txt_logger.info(int(rollout_diversity_eval[0].item()<rollout_diversity_eval[1].item()))
     #txt_logger.info(int(rollout_diversity_eval[0].item()>=rollout_diversity_eval[1].item()))
-    z = (1-args.c_z)*z + args.c_z*math.log(step_update_factor)
-    #z = (1-args.c_z)*z + args.c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + args.c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
+    z = (1-c_z)*z + c_z*math.log(step_update_factor)
+    #z = (1-c_z)*z + c_z*math.log(args.alpha)*int(rollout_diversity_eval[0].item()>rollout_diversity_eval[1].item()) + c_z*math.log(args.beta)*int(rollout_diversity_eval[0].item()<=rollout_diversity_eval[1].item())
     #hard limit on step size to prevent network saturation
-    if z > 2.5:
-        z = 2.5
-    txt_logger.info('z')
-    txt_logger.info(z)
+    #if z > 2.5:
+    #    z = 2.5
+    #txt_logger.info('z')
+    #txt_logger.info(z)
     #if rollout_diversity_eval[0] == rollout_diveoh this isrsity_eval[1]:
     #    new_rew_gen_lr = args.rew_gen_lr
     #else:
     new_rew_gen_lr = args.rew_gen_lr*math.exp(z/args.d_sigma)
-    if new_rew_gen_lr > 7:
-        new_rew_gen_lr = 7
+    if new_rew_gen_lr > 15:
+        new_rew_gen_lr = 15
     if new_rew_gen_lr < 0.05:
         new_rew_gen_lr = 0.05
     # clear models
