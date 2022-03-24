@@ -397,8 +397,9 @@ while num_frames < args.frames:
         txt_logger.info(global_diversity_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_global_diversity = torch.tensor(global_diversity_list)
+        rollout_global_diversity_raw = copy.deepcopy(rollout_global_diversity)
         rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
-        rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity + lifetime_returns
+        rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
         txt_logger.info(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
@@ -465,10 +466,11 @@ while num_frames < args.frames:
         #write to log
         #convert to floatin point
         rollout_diversity_eval = 1.0*rollout_diversity_eval
-        diversity_mean =torch.mean(rollout_diversity_eval)
-        diversity_max = torch.max(rollout_diversity_eval)
-        diversity_min = torch.min(rollout_diversity_eval)
-        diversity_std = torch.std(rollout_diversity_eval)
+        report_rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity* rollout_global_diversity) + lifetime_returns
+        diversity_mean =torch.mean(report_rollout_diversity_eval)
+        diversity_max = torch.max(report_rollout_diversity_eval)
+        diversity_min = torch.min(report_rollout_diversity_eval)
+        diversity_std = torch.std(report_rollout_diversity_eval)
         mean_list = []
         var_list = []
         agent_layers = master_rew_gen.state_dict()
@@ -495,14 +497,27 @@ while num_frames < args.frames:
         tb_writer.add_scalar('diversity_eps/min',diversity_eps_min, num_frames)  
         tb_writer.add_scalar('diversity_eps/std',diversity_eps_std, num_frames) 
 
-        diversity_global_mean = torch.mean(rollout_global_diversity)
-        diversity_global_max = torch.max(rollout_global_diversity)
-        diversity_global_min = torch.min(rollout_global_diversity)
-        diversity_global_std = torch.std(rollout_global_diversity)
+
+        report_diversity_global = rollout_global_diversity * rollout_global_diversity_raw
+        diversity_global_mean = torch.mean(report_diversity_global)
+        diversity_global_max = torch.max(report_diversity_global)
+        diversity_global_min = torch.min(report_diversity_global)
+        diversity_global_std = torch.std(report_diversity_global)
         tb_writer.add_scalar('diversity_global/mean',diversity_global_mean, num_frames)  
         tb_writer.add_scalar('diversity_global/max',diversity_global_max, num_frames)  
         tb_writer.add_scalar('diversity_global/min',diversity_global_min, num_frames)  
         tb_writer.add_scalar('diversity_global/std',diversity_global_std, num_frames)
+
+        # report lifetime returns
+        lifetime_reward_mean = torch.mean(lifetime_returns)
+        lifetime_reward_max = torch.max(lifetime_returns)
+        lifetime_reward_min = torch.min(lifetime_returns)
+        lifetime_reward_std = torch.std(lifetime_returns)
+        tb_writer.add_scalar('lifetime_reward/mean',lifetime_reward_mean, num_frames)  
+        tb_writer.add_scalar('lifetime_reward/max', lifetime_reward_max, num_frames)  
+        tb_writer.add_scalar('lifetime_reward/min',lifetime_reward_min, num_frames)  
+        tb_writer.add_scalar('lifetime_reward/std',lifetime_reward_std, num_frames)
+
 
         tb_writer.add_scalar('evo_step_size', args.rew_gen_lr, num_frames)        
         evol_start_time = time.time()
