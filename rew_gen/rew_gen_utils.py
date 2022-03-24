@@ -64,8 +64,8 @@ def update_weights(update_factor, network, z, args, weights_updates, c_z):
     candidate_rew_gen_lr = args.rew_gen_lr*math.exp(updated_z/args.d_sigma)
     if candidate_rew_gen_lr > 15:
         candidate_rew_gen_lr = 15
-    if candidate_rew_gen_lr < 0.05:
-        candidate_rew_gen_lr = 0.05
+    if candidate_rew_gen_lr < 0.01:
+        candidate_rew_gen_lr = 0.01
     network.network_noise = copy.deepcopy(
         candidate_rew_gen_lr*weights_updates)
     network.update_weights(
@@ -134,10 +134,10 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     c_z = args.c_z*torch.ones(args.TPA_agents)
     for i in range(0, args.TPA_agents):
         if i == 0:
-            if args.rew_gen_lr < 0.1:
-                c_z[i] = 1.5 * c_z[i]
-                update_weights(6*args.beta, rew_gen_list[i], z, args, weights_updates,c_z[i].item())
-                factor_matrix.append(6*args.beta)
+            if args.rew_gen_lr < 0.5:
+                c_z[i] = 1.9 * c_z[i]
+                update_weights(12*args.beta, rew_gen_list[i], z, args, weights_updates,c_z[i].item())
+                factor_matrix.append(12*args.beta)
             else:
                 update_weights(2*args.beta, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
                 factor_matrix.append(2*args.beta)
@@ -154,11 +154,11 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
             factor_matrix.append(args.alpha)
         elif i == 3:
             if args.rew_gen_lr > 3.5:
-                c_z[i] = 1.5 * c_z[i]
+                c_z[i] = 1.9 * c_z[i]
                 update_weights(0.01*args.alpha, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
                 factor_matrix.append(0.01*args.alpha)
             else:
-                update_weights(0.25*args.alpha, rew_gen_list[i], z, args, weights_updates,c_z[i].item())
+                update_weights(0.25*args.alpha, rew_gen_list[i], z, args, weights_updates, c_z[i].item())
                 factor_matrix.append(0.25*args.alpha)
         else:
             print('you defined extra TPA agents but did not define what to do with them. fix it. Exiting!')
@@ -321,8 +321,8 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     new_rew_gen_lr = args.rew_gen_lr*math.exp(z/args.d_sigma)
     if new_rew_gen_lr > 15:
         new_rew_gen_lr = 15
-    if new_rew_gen_lr < 0.05:
-        new_rew_gen_lr = 0.05
+    if new_rew_gen_lr < 0.01:
+        new_rew_gen_lr = 0.01
     # clear models
     for ii in range(0,args.TPA_agents):
         algos_list[ii].reset()
