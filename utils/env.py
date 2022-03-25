@@ -5,6 +5,6 @@ from gym_minigrid.wrappers import *
 
 def make_env(env_key, seed=None):
     env = gym.make(env_key)
-    env = ReseedWrapper(env, seeds = [140], seed_idx = 0)
+    env = ReseedWrapper(env, seeds = [2150], seed_idx = 0)
     #env.seed(seed)
     return env
