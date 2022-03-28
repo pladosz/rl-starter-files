@@ -124,8 +124,8 @@ class RewGenNet(torch.nn.Module):
         parameter_number = self.parameter_number()
         self.network_noise = noise_standard_deviation*torch.empty((1,parameter_number)).normal_(mean = 0, std = noise_standard_deviation).to(self.device)
         zeros_number = (self.network_noise.shape[1]/(agent_number/2))/self.network_noise.shape[1]
-        mask = torch.cuda.FloatTensor(self.network_noise.shape).uniform_() > zeros_number
-        self.network_noise[mask] = 0
+        #mask = torch.cuda.FloatTensor(self.network_noise.shape).uniform_() > zeros_number
+        #self.network_noise[mask] = 0
         self.update_weights(copy.deepcopy(self.network_noise))
 
     def update_weights(self,updates):

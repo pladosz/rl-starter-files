@@ -290,7 +290,6 @@ while num_frames < args.frames:
         logs2 = algos_list[i].update_parameters(exps)
         logs = {**logs1, **logs2}
         update_end_time = time.time()
-        print(type(sum(logs["return_per_episode"])))
         lifetime_returns[i] += sum(logs["return_per_episode"])
         #delete after update
         exps = None
@@ -373,7 +372,7 @@ while num_frames < args.frames:
         #set new random seed for evo updates
         utils.seed(args.seed*542+num_frames-evo_updates)
         #eval interactions with env
-        #collect trajectories
+        #collect trajectories and compute episodic diversity
         trajectories_list = []
         entropy_list = [] 
         episodic_diversity_list = []
@@ -383,9 +382,9 @@ while num_frames < args.frames:
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
             episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
-        #compute diversity for each outer worker
         txt_logger.info('episodic diversity')
         txt_logger.info(episodic_diversity_list)
+        #compute global diversity
         global_diversity_list = []
         #divide by 10000 to normalize
         for ii in range(0,args.outer_workers):
@@ -398,8 +397,9 @@ while num_frames < args.frames:
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
         rollout_global_diversity = torch.tensor(global_diversity_list)
         rollout_global_diversity_raw = copy.deepcopy(rollout_global_diversity)
-        rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
+        #rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
         rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
+        txt_logger.info('overall diversity')
         txt_logger.info(rollout_diversity_eval)
         diversity_ranking = compute_ranking(rollout_diversity_eval,args.outer_workers).to(device)
         #combine noise
@@ -411,19 +411,14 @@ while num_frames < args.frames:
         #    args.rew_gen_lr = 0.5
         #else:
         #    args.rew_gen_lr = 0.01
-        #determine best ste size
+        #determine best step size
         for env in envs_list_TPA:
             env.reset()
         new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA)
-        print('rew_gen_lr')
-        print(args.rew_gen_lr)
         args.rew_gen_lr = new_rew_gen_lr
         txt_logger.info('new step size {0}'.format(args.rew_gen_lr))
         rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
         best_agent_index = torch.argmax(rollout_diversity_eval)
-        #for ii in range(0,args.outer_workers):
-        #    if ii != best_agent_index:
-        #        rew_gen_list[ii].network_noise = rew_gen_list[best_agent_index].network_noise
         #save most diverse agent
         status = {"num_frames": num_frames, "update": update,
                     "model_state": algos_list[best_agent_index].acmodel.state_dict(), "optimizer_state": algos_list[best_agent_index].optimizer.state_dict()}
@@ -448,14 +443,24 @@ while num_frames < args.frames:
         master_rew_gen.update_weights(rew_gen_weight_updates)
         #print(master_rew_gen.state_dict())
         #update weights of each rew gen with master weights and initialize new noise
-        for ii in range(0,args.outer_workers):
-            algos_list[ii].rew_gen_model.load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
+        #reuse best agent as last agent:
+        #rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
+        rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
+        rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
+        #rew_gen_list[args.outer_workers-1].network_noise =torch.zeros_like(rew_gen_list[best_agent_index].network_noise)  #rew_gen_list[args.outer_workers-1].network_noise# - rew_gen_weight_updates
+        #rew_gen_list[args.outer_workers-1].update_weights(rew_gen_list[args.outer_workers-1].network_noise)
+        print('past best')
+        print(rew_gen_list[best_agent_index].state_dict()['fc_layer_3.weight'])
+        print('index of best agent')
+        print(best_agent_index)
+        for ii in range(0,args.outer_workers-1):
+            rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             #algos_list[ii].rew_gen_model.randomly_mutate(args.noise_std)
             if ii < args.outer_workers/2:
                 rew_gen_list[ii].randomly_mutate(args.noise_std, args.outer_workers)
-            elif ii == args.outer_workers:
-                rew_gen_list[ii].network_noise = torch.zeros_like(rew_gen_list[ii-1].network_noise)
-                pass
+            #elif ii == args.outer_workers:
+            #    rew_gen_list[ii].network_noise = torch.zeros_like(rew_gen_list[ii-1].network_noise)
+            #    pass
             else:
                 rew_gen_list[ii].network_noise = copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise)
                 rew_gen_list[ii].update_weights(copy.deepcopy(-rew_gen_list[int(ii-args.outer_workers/2)].network_noise))
@@ -466,7 +471,9 @@ while num_frames < args.frames:
         #write to log
         #convert to floatin point
         rollout_diversity_eval = 1.0*rollout_diversity_eval
-        report_rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity* rollout_global_diversity) + lifetime_returns
+        #report_rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity* rollout_global_diversity) + lifetime_returns
+        #report_rollout_diversity_eval = ((rollout_global_diversity-lifetime_returns)* rollout_diversity_eval) + lifetime_returns
+        report_rollout_diversity_eval = rollout_diversity_eval 
         diversity_mean =torch.mean(report_rollout_diversity_eval)
         diversity_max = torch.max(report_rollout_diversity_eval)
         diversity_min = torch.min(report_rollout_diversity_eval)
@@ -550,6 +557,7 @@ while num_frames < args.frames:
             utils.seed(args.seed)
             print(ii)
             print(device)
+            envs_list[ii].reset()
             if args.algo == "a2c":
                 algos_list.append(torch_ac.A2CAlgo(envs_list[ii], acmodels_list[ii], rew_gen_list[ii], RND_list[ii], args.procs, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                                     args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
@@ -561,6 +569,8 @@ while num_frames < args.frames:
             else:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
+        print('current best')
+        print(rew_gen_list[args.outer_workers-1].state_dict()['fc_layer_3.weight'])
                 
         
 

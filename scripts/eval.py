@@ -22,12 +22,12 @@ class eval:
         #utils.seed(self.args.seed)
         # Set device
         # Load environment
-        seed = 140
+        seed = 2150
         self.env = utils.make_env(self.args.env_name, seed)
         for _ in range(self.args.shift):
-            self.env.seed =140
+            self.env.seed =2150
             self.env.reset()
-            self.env.seed =140
+            self.env.seed =2150
         # Load agent
         self.agent =  Agent_debug(self.env.observation_space, self.env.action_space, model,
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
@@ -51,9 +51,9 @@ class eval:
     def run(self):
         episodic_diversity_reward = 0
         for episode in range(self.args.episodes):
-            self.env.seed =140
+            self.env.seed = 2150
             obs = self.env.reset()
-            self.env.seed =140
+            self.env.seed = 2150
             self.episode_length_counter = 0
             #vlear episodic buffers and initalize the reward
             self.episodic_buffer.clear()
