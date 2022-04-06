@@ -126,7 +126,7 @@ class RewGenNet(torch.nn.Module):
         zeros_number = (self.network_noise.shape[1]/(agent_number/2))/self.network_noise.shape[1]
         #mask = torch.cuda.FloatTensor(self.network_noise.shape).uniform_() > zeros_number
         #self.network_noise[mask] = 0
-        self.update_weights(copy.deepcopy(self.network_noise))
+#        self.update_weights(copy.deepcopy(self.network_noise))
 
     def update_weights(self,updates):
         new_weights = updates.squeeze()

@@ -100,6 +100,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     rew_gen_list = []
     RND_list = []
     best_trajectories_list = []
+    lifetime_returns = torch.zeros(args.TPA_agents)
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
@@ -212,6 +213,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
             logs2 = algos_list[i].update_parameters(exps)
             logs = {**logs1, **logs2}
             update_end_time = time.time()
+            lifetime_returns[i] += sum(logs["return_per_episode"])
             #delete after update
             exps = None
             logs1 = None
@@ -288,7 +290,8 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     txt_logger.info(global_diversity_list)
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)
-    rollout_diversity_eval = rollout_global_diversity * rollout_eps_diversity
+    lifetime_returns = 10*lifetime_returns
+    rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
     txt_logger.info('diversity eval TPA')
     #compute step update
     best_agent = torch.argmax(rollout_diversity_eval)
@@ -330,6 +333,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     algos_list.clear()
     algos_list = []
     acmodels_list = []
+    lifetime_returns = torch.zeros(args.TPA_agents)
     txt_logger.info('TPA updated!')
 
 
