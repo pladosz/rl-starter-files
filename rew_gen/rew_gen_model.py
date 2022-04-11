@@ -18,9 +18,9 @@ class RewGenNet(torch.nn.Module):
         #initialize hidden state
         self.device = device
         self.init_hidden()
-        self.fc_layer_1 = torch.nn.Linear(state_representation_size, 128)
+        self.fc_layer_1 = torch.nn.Linear(state_representation_size, 64)
         #self.fc_layer_2 = torch.nn.Linear(256, 128)
-        self.fc_layer_3 = torch.nn.Linear(128, 32)
+        self.fc_layer_3 = torch.nn.Linear(64, 32)
         self.memory_layer = torch.nn.RNN(32, 16) #torch.nn.GRU(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
         #self.memory_layer = torch.nn.Linear(64, 32)
         self.fc_layer_4 = torch.nn.Linear(16, 1)
@@ -144,4 +144,22 @@ class RewGenNet(torch.nn.Module):
             print(new_weights.shape)
             exit()
         self.load_state_dict(new_parameter_dict)
+
+    def replace_weights(self,updates):
+        new_weights = updates.squeeze()
+        state_dict = self.state_dict()
+        new_parameter_dict = OrderedDict()
+        for param_type in state_dict:
+                numel = torch.numel(state_dict[param_type])
+                param_type_weight_update = new_weights[0:numel]
+                param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
+                new_parameter_dict[param_type] = param_type_weight_update
+                #delete already used weights
+                new_weights = new_weights[numel:]
+        if new_weights.shape[0] != 0:
+            print("I am error")
+            print(new_weights.shape)
+            exit()
+        self.load_state_dict(new_parameter_dict)
+
 

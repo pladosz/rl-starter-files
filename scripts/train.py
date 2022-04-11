@@ -216,12 +216,12 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(512, device)
+    rew_gen = RewGenNet(147, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(512, device)
+master_rew_gen = RewGenNet(147, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 z = args.rew_gen_lr
@@ -410,7 +410,6 @@ while num_frames < args.frames:
         rollout_global_diversity = torch.tensor(global_diversity_list)
         rollout_global_diversity_raw = copy.deepcopy(rollout_global_diversity)
         #rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
-        #clam minimum value of lifetime returns
         lifetime_returns_original = copy.deepcopy(lifetime_returns)
         lifetime_returns = 10*lifetime_returns
         rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
@@ -454,7 +453,18 @@ while num_frames < args.frames:
         #compute distributions ratio
         old_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
         master_rew_gen.update_weights(rew_gen_weight_updates)
-         #reuse old agent
+        #weight decay to prevent convergence
+        weight_norm = torch.linalg.vector_norm(torch.abs(master_rew_gen.get_vectorized_param()))
+        if weight_norm < 0:
+            print('weight norm negative, check')
+        txt_logger.info(weight_norm)
+        sign_before = torch.sign(master_rew_gen.get_vectorized_param())
+        decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.005*weight_norm
+        sign_after = torch.sign(decayed_weights)
+        decayed_weights[sign_before != sign_after] = 0.0
+        weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
+        master_rew_gen.update_weights(weights_decay_update)
+         #reuse old best agent
         rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
         rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
         new_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
@@ -560,6 +570,7 @@ while num_frames < args.frames:
         #rew_gen_list[args.outer_workers-1].network_noise =torch.zeros_like(rew_gen_list[best_agent_index].network_noise)  #rew_gen_list[args.outer_workers-1].network_noise# - rew_gen_weight_updates
         #rew_gen_list[args.outer_workers-1].update_weights(rew_gen_list[args.outer_workers-1].network_noise)
         for ii in range(0,args.outer_workers-1):
+            rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             rew_gen_list[ii].network_noise = copy.deepcopy(noise_list[ii]).unsqueeze(0)
             rew_gen_list[ii].update_weights(rew_gen_list[int(ii)].network_noise)
         evo_updates += 1
@@ -654,6 +665,7 @@ while num_frames < args.frames:
         for ii in range(0,args.outer_workers):
             utils.seed(args.seed)
             envs_list[ii].reset()
+            print(rew_gen_list[ii].get_vectorized_param())
             if args.algo == "a2c":
                 algos_list.append(torch_ac.A2CAlgo(envs_list[ii], acmodels_list[ii], rew_gen_list[ii], RND_list[ii], args.procs, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                                     args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
@@ -665,7 +677,6 @@ while num_frames < args.frames:
             else:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
-        print('current best')
                 
         
 

@@ -59,13 +59,11 @@ def compute_ranking(results_vector, num_workers):
 
 def update_weights(update_factor, network, z, args, weights_updates, c_z):
     updated_z = (1-c_z)*z + c_z*math.log(update_factor)
-    if updated_z > 2.5:
-        updated_z = 2.5
     candidate_rew_gen_lr = args.rew_gen_lr*math.exp(updated_z/args.d_sigma)
-    if candidate_rew_gen_lr > 7:
-        candidate_rew_gen_lr = 7
-    if candidate_rew_gen_lr < 0.05:
-        candidate_rew_gen_lr = 0.05
+    #if candidate_rew_gen_lr > 7:
+    #    candidate_rew_gen_lr = 7
+    #if candidate_rew_gen_lr < 0.05:
+    #    candidate_rew_gen_lr = 0.05
     network.network_noise = copy.deepcopy(
         candidate_rew_gen_lr*weights_updates)
     network.update_weights(
@@ -104,12 +102,12 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
-        rew_gen = RewGenNet(512, device)
+        rew_gen = RewGenNet(147, device)
         RND_model = RNDModelNet(device)
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(512, device)
+    master_rew_gen = RewGenNet(147, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))
@@ -208,6 +206,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         for i in range(0, args.TPA_agents):
             #fix seeds for all the agents exploration
             utils.seed(args.seed)
+            print(i)
             update_start_time = time.time()
             exps, logs1 = algos_list[i].collect_experiences()
             logs2 = algos_list[i].update_parameters(exps)
