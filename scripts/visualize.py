@@ -63,7 +63,7 @@ agent = utils.Agent(env.observation_space, env.action_space, model_dir,
 print("Agent loaded\n")
 
 #load random rew_gen and rnd, it doesn't matter for visualisation
-rew_gen = RewGenNet(512,device)
+rew_gen = RewGenNet(243,device)
 RND_model = RNDModelNet(device)
 # Run the agent
 episodic_buffer = Episodic_buffer()
@@ -90,10 +90,10 @@ for episode in range(args.episodes):
         if args.gif:
             frames.append(numpy.moveaxis(env.render("rgb_array"), 2, 0))
         RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
-        state_rep = RND_model.get_state_rep(RND_observation).cpu().numpy()
+        state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() 
         #get episodic diversity
-        eps_div = episodic_buffer.compute_episodic_intrinsic_reward(state_rep)
-        episodic_buffer.add_state(state_rep)
+        eps_div = episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
+        episodic_buffer.add_state(state_rep_rew_gen)
         episodic_buffer.compute_new_average()
         print('episodic_diversity_{0}'.format(eps_div))
         action = agent.get_action(obs)

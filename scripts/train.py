@@ -216,12 +216,12 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(147, device)
+    rew_gen = RewGenNet(243, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(147, device)
+master_rew_gen = RewGenNet(243, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 z = args.rew_gen_lr
@@ -278,7 +278,7 @@ for i in range(0,args.outer_workers):
         algos_list[i].optimizer.load_state_dict(status["optimizer_state"])
     txt_logger.info("Optimizer loaded\n")
 # Train model
-
+print(master_ACModel_model)
 num_frames = status["num_frames"]
 update = status["update"]
 start_time = time.time()
@@ -399,7 +399,7 @@ while num_frames < args.frames:
         for ii in range(0,args.outer_workers):
             if rerun_needed[ii]:
                 diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
-                diversity = min(max(diversity,0.1),10)
+                diversity = min(max(diversity,0.001),100)
                 global_diversity_list.append(diversity)
             else:
                 global_diversity_list.append(old_global_diversity_list[ii])
@@ -411,7 +411,7 @@ while num_frames < args.frames:
         rollout_global_diversity_raw = copy.deepcopy(rollout_global_diversity)
         #rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
         lifetime_returns_original = copy.deepcopy(lifetime_returns)
-        lifetime_returns = 10*lifetime_returns
+        lifetime_returns = 30*lifetime_returns
         rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
         txt_logger.info('overall diversity')
         txt_logger.info(rollout_diversity_eval)
@@ -459,14 +459,14 @@ while num_frames < args.frames:
             print('weight norm negative, check')
         txt_logger.info(weight_norm)
         sign_before = torch.sign(master_rew_gen.get_vectorized_param())
-        decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.005*weight_norm
+        decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
         sign_after = torch.sign(decayed_weights)
         decayed_weights[sign_before != sign_after] = 0.0
         weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
         master_rew_gen.update_weights(weights_decay_update)
          #reuse old best agent
-        rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
-        rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
+        #rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
+        #rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
         new_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
         done = False
         noise_list = []
@@ -489,18 +489,18 @@ while num_frames < args.frames:
             old_calculation_2 = torch.matmul((old_parameters - old_mean ), ( old_parameters - old_mean))
             #distributions_ratio_old = torch.exp(0.5*covariance_matrix_inverse*(new_calculation-old_calculation))
             distributions_ratio_old_2 = torch.exp(-0.5*covariance_matrix_inverse*(new_calculation_2-old_calculation_2))
-            if min(1, distributions_ratio_old_2.item()) > sample_flag_1:
-                txt_logger.info('reuse old agent')
-                txt_logger.info(' sampling number {0}'.format(sampling_number))
-                txt_logger.info(distributions_ratio_old_2.item())
-                old_parameters = (rew_gen_list[sample_agent].get_vectorized_param() - master_rew_gen.get_vectorized_param())
-                noise_list.append(old_parameters)
-                rerun_needed.append(False)
-                # for all agents not requiring rerun save
-                old_trajectory_list.append(trajectories_list[sample_agent])
-                old_episodic_diversity_list.append(episodic_diversity_list[sample_agent])
-                old_lifetime_returns_list.append(lifetime_returns_original[sample_agent])
-                old_global_diversity_list.append(global_diversity_list[sample_agent])
+            #if min(1, distributions_ratio_old_2.item()) > sample_flag_1:
+            #    txt_logger.info('reuse old agent')
+            #    txt_logger.info(' sampling number {0}'.format(sampling_number))
+            #    txt_logger.info(distributions_ratio_old_2.item())
+            #    old_parameters = (rew_gen_list[sample_agent].get_vectorized_param() - master_rew_gen.get_vectorized_param())
+            #    noise_list.append(old_parameters)
+            #    rerun_needed.append(False)
+            #    # for all agents not requiring rerun save
+            #    old_trajectory_list.append(trajectories_list[sample_agent])
+            #    old_episodic_diversity_list.append(episodic_diversity_list[sample_agent])
+            #    old_lifetime_returns_list.append(lifetime_returns_original[sample_agent])
+            #    old_global_diversity_list.append(global_diversity_list[sample_agent])
 
             rew_gen_list[sample_agent].randomly_mutate(args.noise_std, args.outer_workers)
             new_parameters = rew_gen_list[sample_agent].network_noise.squeeze() + new_mean
@@ -532,8 +532,8 @@ while num_frames < args.frames:
                 old_lifetime_returns_list.append(None)
                 old_global_diversity_list.append(None)
                 old_global_diversity_list.append(None)
-            if len(noise_list) >= args.outer_workers-1:
-                if len(noise_list) > args.outer_workers-1:
+            if len(noise_list) >= args.outer_workers:
+                if len(noise_list) > args.outer_workers:
                     for i in range(0, len(noise_list) - args.outer_workers-1):
                         noise_list.pop()
                         rerun_needed.pop()
@@ -569,12 +569,12 @@ while num_frames < args.frames:
         #rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
         #rew_gen_list[args.outer_workers-1].network_noise =torch.zeros_like(rew_gen_list[best_agent_index].network_noise)  #rew_gen_list[args.outer_workers-1].network_noise# - rew_gen_weight_updates
         #rew_gen_list[args.outer_workers-1].update_weights(rew_gen_list[args.outer_workers-1].network_noise)
-        for ii in range(0,args.outer_workers-1):
+        for ii in range(0,args.outer_workers):
             rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             rew_gen_list[ii].network_noise = copy.deepcopy(noise_list[ii]).unsqueeze(0)
             rew_gen_list[ii].update_weights(rew_gen_list[int(ii)].network_noise)
         evo_updates += 1
-        txt_logger.info('evolutionary update complete')
+        txt_logger.info('evolutionary update {0} complete'.format(evo_updates))
         evol_end_time = time.time()
         txt_logger.info("computation_time_{0}".format(evol_end_time-evol_start_time))
         #write to log
@@ -613,8 +613,8 @@ while num_frames < args.frames:
         tb_writer.add_scalar('diversity_eps/min',diversity_eps_min, num_frames)  
         tb_writer.add_scalar('diversity_eps/std',diversity_eps_std, num_frames) 
 
-
-        report_diversity_global = rollout_global_diversity * rollout_global_diversity_raw*1.0
+        #report_diversity_global = rollout_global_diversity * rollout_global_diversity_raw*1.0
+        report_diversity_global = rollout_global_diversity
         diversity_global_mean = torch.mean(report_diversity_global)
         diversity_global_max = torch.max(report_diversity_global)
         diversity_global_min = torch.min(report_diversity_global)

@@ -33,7 +33,7 @@ class eval:
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
 
         #load random rew_gen and rnd, it doesn't matter for visualisation
-        self.rew_gen_model = RewGenNet(147, device) #= rew_gen_model
+        self.rew_gen_model = RewGenNet(243, device) #= rew_gen_model
         self.rew_gen_model.load_state_dict(rew_gen_model)
         self.hidden_state = self.rew_gen_model.reset_hidden(0,training=True)
         self.RND_model = RND_model
@@ -60,12 +60,12 @@ class eval:
             while True:
                 #get current state embedding using RND
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
-                state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1) #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
-                state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 reward_intrinsic, self.hidden_state = self.rew_gen_model(state_rep_rew_gen, self.hidden_state)
                 #get episodic diversity
-                eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep)
-                self.episodic_buffer.add_state(state_rep)
+                eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
+                self.episodic_buffer.add_state(state_rep_rew_gen)
                 self.episodic_buffer.compute_new_average()
                 action = self.agent.get_action(obs)
                 obs, reward, done, _ = self.env.step(action)

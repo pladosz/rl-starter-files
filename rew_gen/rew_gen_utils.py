@@ -102,16 +102,15 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
-        rew_gen = RewGenNet(147, device)
+        rew_gen = RewGenNet(243, device)
         RND_model = RNDModelNet(device)
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(147, device)
+    master_rew_gen = RewGenNet(243, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))
-    master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 
     master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
     master_ACModel_model.load_state_dict(copy.deepcopy(acmodel_weights))
@@ -281,15 +280,15 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     global_diversity_list = []
     #divide by 10000 to normalize
     for ii in range(0,args.TPA_agents):
-        diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])/100
-        diversity = min(max(diversity,0.1),10)
+        diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
+        diversity = min(max(diversity,0.001),100)
         global_diversity_list.append(diversity)
     #episodic_buffer.compute_new_average()
     txt_logger.info('global diversity')
     txt_logger.info(global_diversity_list)
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)
-    lifetime_returns = 10*lifetime_returns
+    lifetime_returns = 30*lifetime_returns
     rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
     txt_logger.info('diversity eval TPA')
     #compute step update
