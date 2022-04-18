@@ -289,7 +289,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)
     lifetime_returns = 30*lifetime_returns
-    rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
+    rollout_diversity_eval = rollout_global_diversity + rollout_eps_diversity + lifetime_returns
     txt_logger.info('diversity eval TPA')
     #compute step update
     best_agent = torch.argmax(rollout_diversity_eval)
