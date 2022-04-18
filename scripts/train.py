@@ -412,7 +412,7 @@ while num_frames < args.frames:
         #rollout_global_diversity = compute_ranking(rollout_global_diversity,args.outer_workers)
         lifetime_returns_original = copy.deepcopy(lifetime_returns)
         lifetime_returns = 30*lifetime_returns
-        rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
+        rollout_diversity_eval = rollout_global_diversity + rollout_eps_diversity + lifetime_returns
         txt_logger.info('overall diversity')
         txt_logger.info(rollout_diversity_eval)
         txt_logger.info('lifetime reward')
