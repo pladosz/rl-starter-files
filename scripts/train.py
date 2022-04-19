@@ -216,14 +216,15 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(243, device)
+    rew_gen = RewGenNet(147, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(243, device)
+master_rew_gen = RewGenNet(147, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
+network_noise_std = args.noise_std
 z = args.rew_gen_lr
 rerun_needed = []
 master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
@@ -456,20 +457,21 @@ while num_frames < args.frames:
         old_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
         master_rew_gen.update_weights(rew_gen_weight_updates)
         #weight decay to prevent convergence
+        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
         #weight_norm = torch.linalg.vector_norm(torch.abs(master_rew_gen.get_vectorized_param()))
         #if weight_norm < 0:
         #    print('weight norm negative, check')
         #txt_logger.info(weight_norm)
         #sign_before = torch.sign(master_rew_gen.get_vectorized_param())
         #decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
-        decayed_weights = master_rew_gen.get_vectorized_param()*0.005
+            decayed_weights = master_rew_gen.get_vectorized_param()*0.005
         #sign_after = torch.sign(decayed_weights)
         #decayed_weights[sign_before != sign_after] = 0.0
-        weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
-        master_rew_gen.update_weights(weights_decay_update)
+            weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
+            master_rew_gen.update_weights(weights_decay_update)
          #reuse old best agent
-        #rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
-        #rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
+        rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
+        rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
         new_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
         done = False
         noise_list = []
@@ -504,8 +506,8 @@ while num_frames < args.frames:
             #    old_episodic_diversity_list.append(episodic_diversity_list[sample_agent])
             #    old_lifetime_returns_list.append(lifetime_returns_original[sample_agent])
             #    old_global_diversity_list.append(global_diversity_list[sample_agent])
-
-            rew_gen_list[sample_agent].randomly_mutate(args.noise_std, args.outer_workers)
+            rew_gen_list[sample_agent].randomly_mutate(network_noise_std, args.outer_workers)
+            network_noise_std = args.noise_std
             new_parameters = rew_gen_list[sample_agent].network_noise.squeeze() + new_mean
             #new_calculation = torch.matmul((new_mean - new_parameters), (new_mean - new_parameters))
             #old_calculation = torch.matmul((old_mean - new_parameters), (old_mean - new_parameters))
@@ -535,8 +537,8 @@ while num_frames < args.frames:
                 old_lifetime_returns_list.append(None)
                 old_global_diversity_list.append(None)
                 old_global_diversity_list.append(None)
-            if len(noise_list) >= args.outer_workers:
-                if len(noise_list) > args.outer_workers:
+            if len(noise_list) >= args.outer_workers-1:
+                if len(noise_list) > args.outer_workers-1:
                     for i in range(0, len(noise_list) - args.outer_workers-1):
                         noise_list.pop()
                         rerun_needed.pop()
@@ -559,6 +561,7 @@ while num_frames < args.frames:
             best_trajectories_list.append(trajectories_list[index])
         if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
             txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
+            #network_noise_std = 2*args.noise_std
             for item in best_trajectories_list:
                 episodic_buffer.add_state(item.squeeze())
             best_trajectories_list = []
@@ -568,11 +571,7 @@ while num_frames < args.frames:
                 rerun_needed.append(True)
         #print(master_rew_gen.state_dict())
         #update weights of each rew gen with master weights and initialize new noise
-        #reuse best agent as last agent:
-        #rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
-        #rew_gen_list[args.outer_workers-1].network_noise =torch.zeros_like(rew_gen_list[best_agent_index].network_noise)  #rew_gen_list[args.outer_workers-1].network_noise# - rew_gen_weight_updates
-        #rew_gen_list[args.outer_workers-1].update_weights(rew_gen_list[args.outer_workers-1].network_noise)
-        for ii in range(0,args.outer_workers):
+        for ii in range(0,args.outer_workers-1):
             rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             rew_gen_list[ii].network_noise = copy.deepcopy(noise_list[ii]).unsqueeze(0)
             rew_gen_list[ii].update_weights(rew_gen_list[int(ii)].network_noise)

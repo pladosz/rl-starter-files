@@ -18,9 +18,9 @@ class RewGenNet(torch.nn.Module):
         #initialize hidden state
         self.device = device
         self.init_hidden()
-        self.fc_layer_1 = torch.nn.Linear(state_representation_size, 64)
+        self.fc_layer_1 = torch.nn.Linear(state_representation_size, 32)
         #self.fc_layer_2 = torch.nn.Linear(256, 128)
-        self.fc_layer_3 = torch.nn.Linear(64, 32)
+        #self.fc_layer_3 = torch.nn.Linear(64, 32)
         self.memory_layer = torch.nn.RNN(32, 16) #torch.nn.GRU(64, 32)#weight_init(nn.RNN(64, 32)) #layer_init(nn.Linear(64, 32))
         #self.memory_layer = torch.nn.Linear(64, 32)
         self.fc_layer_4 = torch.nn.Linear(16, 1)
@@ -35,7 +35,7 @@ class RewGenNet(torch.nn.Module):
         with torch.no_grad():
             x = torch.relu(self.fc_layer_1(torch.tensor(x).to(self.device)))
             #x = torch.relu(self.fc_layer_2(torch.tensor(x).to(self.device)))
-            x = torch.relu(self.fc_layer_3(torch.tensor(x).to(self.device)))
+            #x = torch.relu(self.fc_layer_3(torch.tensor(x).to(self.device)))
             if len(x.shape) == 1:
                 x = x[None,None,:]
             if len(x.shape) == 2:
@@ -95,12 +95,13 @@ class RewGenNet(torch.nn.Module):
         #linear layers parameters number
         reward_network_params_first_layer = self.parameter_numel_per_layer(self.fc_layer_1)
         #reward_network_params_second_layer = self.parameter_numel_per_layer(self.fc_layer_2)
-        reward_network_params_third_layer = self.parameter_numel_per_layer(self.fc_layer_3)
+        #reward_network_params_third_layer = self.parameter_numel_per_layer(self.fc_layer_3)
         reward_network_memory_layer = self.parameter_numel_per_layer(self.memory_layer)
         reward_network_params_fourth_layer = self.parameter_numel_per_layer(self.fc_layer_4)
         #parameter_number = reward_network_params_first_layer + reward_network_params_second_layer + reward_network_params_third_layer + reward_network_memory_layer + reward_network_params_fourth_layer
-        parameter_number = reward_network_params_first_layer + reward_network_params_third_layer + reward_network_memory_layer + reward_network_params_fourth_layer
+        #parameter_number = reward_network_params_first_layer + reward_network_params_third_layer + reward_network_memory_layer + reward_network_params_fourth_layer
         #return reward_network_params_first_layer, reward_network_params_second_layer,  reward_network_params_third_layer, reward_network_memory_layer, reward_network_params_fourth_layer
+        parameter_number = reward_network_params_first_layer + reward_network_memory_layer + reward_network_params_fourth_layer       
         return parameter_number
 
     def parameter_numel_per_layer (self,layer):
