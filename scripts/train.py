@@ -457,18 +457,18 @@ while num_frames < args.frames:
         old_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
         master_rew_gen.update_weights(rew_gen_weight_updates)
         #weight decay to prevent convergence
-        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
+        #if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
         #weight_norm = torch.linalg.vector_norm(torch.abs(master_rew_gen.get_vectorized_param()))
         #if weight_norm < 0:
         #    print('weight norm negative, check')
         #txt_logger.info(weight_norm)
         #sign_before = torch.sign(master_rew_gen.get_vectorized_param())
         #decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
-            decayed_weights = master_rew_gen.get_vectorized_param()*0.005
+        #    decayed_weights = master_rew_gen.get_vectorized_param()*0.005
         #sign_after = torch.sign(decayed_weights)
         #decayed_weights[sign_before != sign_after] = 0.0
-            weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
-            master_rew_gen.update_weights(weights_decay_update)
+        #    weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
+        #    master_rew_gen.update_weights(weights_decay_update)
          #reuse old best agent
         rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
         rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
@@ -561,7 +561,7 @@ while num_frames < args.frames:
             best_trajectories_list.append(trajectories_list[index])
         if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
             txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
-            #network_noise_std = 2*args.noise_std
+            network_noise_std = 2*args.noise_std
             for item in best_trajectories_list:
                 episodic_buffer.add_state(item.squeeze())
             best_trajectories_list = []
