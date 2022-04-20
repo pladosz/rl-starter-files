@@ -216,12 +216,12 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(147, device)
+    rew_gen = RewGenNet(507, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(147, device)
+master_rew_gen = RewGenNet(507, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 network_noise_std = args.noise_std

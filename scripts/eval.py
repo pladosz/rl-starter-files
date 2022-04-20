@@ -33,7 +33,7 @@ class eval:
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
 
         #load random rew_gen and rnd, it doesn't matter for visualisation
-        self.rew_gen_model = RewGenNet(147, device) #= rew_gen_model
+        self.rew_gen_model = RewGenNet(507, device) #= rew_gen_model
         self.rew_gen_model.load_state_dict(rew_gen_model)
         self.hidden_state = self.rew_gen_model.reset_hidden(0,training=True)
         self.RND_model = RND_model
