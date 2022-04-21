@@ -464,11 +464,11 @@ while num_frames < args.frames:
         #txt_logger.info(weight_norm)
         #sign_before = torch.sign(master_rew_gen.get_vectorized_param())
         #decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
-        #    decayed_weights = master_rew_gen.get_vectorized_param()*0.005
+        weights_decay = -master_rew_gen.get_vectorized_param()*0.005
         #sign_after = torch.sign(decayed_weights)
         #decayed_weights[sign_before != sign_after] = 0.0
-        #    weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
-        #    master_rew_gen.update_weights(weights_decay_update)
+        #weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
+        master_rew_gen.update_weights(weights_decay)
          #reuse old best agent
         rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
         rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
@@ -507,7 +507,6 @@ while num_frames < args.frames:
             #    old_lifetime_returns_list.append(lifetime_returns_original[sample_agent])
             #    old_global_diversity_list.append(global_diversity_list[sample_agent])
             rew_gen_list[sample_agent].randomly_mutate(network_noise_std, args.outer_workers)
-            network_noise_std = args.noise_std
             new_parameters = rew_gen_list[sample_agent].network_noise.squeeze() + new_mean
             #new_calculation = torch.matmul((new_mean - new_parameters), (new_mean - new_parameters))
             #old_calculation = torch.matmul((old_mean - new_parameters), (old_mean - new_parameters))
@@ -521,7 +520,8 @@ while num_frames < args.frames:
             #print(old_calculation_2-new_calculation_2)
             #print(distributions_ratio_new_2)
             #exit()
-            if max(0,1-distributions_ratio_new_2.item()) > sample_flag_2 or sampling_number > 10000:
+            txt_logger.info('noise is {0}'.format(network_noise_std))
+            if True: #max(0,1-distributions_ratio_new_2.item()) > sample_flag_2 or sampling_number > 10000:
                 txt_logger.info('create new')
                 txt_logger.info(' sampling number {0}'.format(sampling_number))
                 noise_list.append(new_parameters-new_mean)
@@ -556,12 +556,13 @@ while num_frames < args.frames:
                 break
             sampling_number +=1
                 # add trajectories to buffer
+        network_noise_std = args.noise_std
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
         if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
             txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
-            network_noise_std = 2*args.noise_std
+            #network_noise_std = 2*args.noise_std
             for item in best_trajectories_list:
                 episodic_buffer.add_state(item.squeeze())
             best_trajectories_list = []

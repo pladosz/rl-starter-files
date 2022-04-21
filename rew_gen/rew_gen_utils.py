@@ -107,7 +107,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(507, device)
+    master_rew_gen = RewGenNet(363, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))

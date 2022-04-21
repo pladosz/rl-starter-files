@@ -63,7 +63,7 @@ agent = utils.Agent(env.observation_space, env.action_space, model_dir,
 print("Agent loaded\n")
 
 #load random rew_gen and rnd, it doesn't matter for visualisation
-rew_gen = RewGenNet(243,device)
+rew_gen = RewGenNet(363,device)
 RND_model = RNDModelNet(device)
 # Run the agent
 episodic_buffer = Episodic_buffer()
