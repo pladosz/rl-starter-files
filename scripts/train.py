@@ -250,7 +250,7 @@ for i in range(0,args.outer_workers):
 #        rew_gen_list[i].load_state_dict(copy.deepcopy(rew_gen_list[agent_to_copy].state_dict()))
         RND_list[i].load_state_dict(copy.deepcopy(RND_list[agent_to_copy].state_dict()))
         #acmodels_list[i].load_state_dict(copy.deepcopy(acmodels_list[agent_to_copy].state_dict()))
-episodic_buffer = Episodic_buffer()
+episodic_buffer = Episodic_buffer(n_neighbors=10, mu = 0.9, zeta = 50, epsilon = 0.0001, const = 0.001, s_m = 0.04)
 #save inital random state of each policy agent
 policy_agent_params_list = []
 for i in range(0, args.outer_workers):
@@ -365,7 +365,7 @@ while num_frames < args.frames:
             random_agent_id = torch.randint(0,args.outer_workers,(1,1)).item()
             random_trajectory = trajectories_list[random_agent_id]
             dummy_trajectory = np.zeros_like(random_trajectory)+100
-            episodic_buffer.add_state(dummy_trajectory)
+            episodic_buffer.add_state(random_trajectory)
         #compute averge to stop first solution exploding
         for ii in range(0,args.outer_workers):
             episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
@@ -617,7 +617,7 @@ while num_frames < args.frames:
         tb_writer.add_scalar('diversity_eps/std',diversity_eps_std, num_frames) 
 
         #report_diversity_global = rollout_global_diversity * rollout_global_diversity_raw*1.0
-        report_diversity_global = rollout_global_diversity
+        report_diversity_global = rollout_global_diversity * 1.0
         diversity_global_mean = torch.mean(report_diversity_global)
         diversity_global_max = torch.max(report_diversity_global)
         diversity_global_min = torch.min(report_diversity_global)

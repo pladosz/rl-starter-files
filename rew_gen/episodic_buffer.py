@@ -36,18 +36,28 @@ class Episodic_buffer():
         else:
             neighbors_number = min(len(self.replay_buffer),self.n_neighbors)
             self.nbrs = FaissKNeighbors(n_neighbors=neighbors_number)
-            distances = self.compute_k_nearest_neighbours_clustering(state)
+            distances, indicies = self.compute_k_nearest_neighbours_clustering(state)
+            #for i in range(0, indicies.shape[1]):
+            #    print(i)
+            #    print('distances')
+            #    print(distances[:,i])
+            #    print('index')
+            #    print(int(indicies[:,i].item()))
+            #    print('vector difference')
+            #    print(state.squeeze() - self.replay_buffer[int(indicies[:,i].item())])
+                
             #compute moving average
             for i in range(0,distances.shape[1]):
                 distance=distances[0,i]
                 self.distances_list.append(distance)
-            #print('distance')
-            #print(distances)
             #prevent issue with zero moving average
             if self.moving_average_distance != 0:
                 distances = distances/self.moving_average_distance
             #kill off too small distances
-            distances = distances - self.zeta
+            if self.moving_average_distance != 0:
+                distances = distances - self.zeta/self.moving_average_distance
+            else: 
+                distances = distances - self.zeta
             distances_too_small_indexes = np.where(distances<0)
             distances[distances_too_small_indexes] = 0
             K_v = self.epsilon / (distances+self.epsilon)
@@ -64,7 +74,9 @@ class Episodic_buffer():
                 print(distance)
                 print(self.moving_average_distance)
                 exit()
-            if r_episodic < 1.5:
+            print('similarity')
+            print(similarity)
+            if similarity > self.s_m:
                 r_episodic = 0
             return r_episodic
     
@@ -82,6 +94,7 @@ class Episodic_buffer():
             # create numpy arrayx
             replay_buffer_numpy = np.stack(self.replay_buffer,axis=0)
             self.nbrs.fit(replay_buffer_numpy)
-            neighbours = self.nbrs.kneighbors(state.reshape(1, -1))
-            distances = np.square(neighbours)
-            return distances
+            neighbours, indices = self.nbrs.kneighbors(state.reshape(1, -1))
+            #distances = np.square(neighbours)
+            distances = neighbours
+            return distances, indices

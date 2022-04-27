@@ -1,4 +1,5 @@
 import argparse
+from random import randint
 import numpy
 
 import utils
@@ -39,7 +40,7 @@ class eval:
         self.RND_model = RND_model
         self.episode_count = 0
         # Run the agent
-        self.trajectory = torch.zeros((4*max_steps_per_episode+4,1))
+        self.trajectory = torch.zeros((2*max_steps_per_episode+2,1))
         #add episodic experience buffer
         self.episodic_buffer = Episodic_buffer()
 
@@ -68,6 +69,7 @@ class eval:
                 self.episodic_buffer.add_state(state_rep_rew_gen)
                 self.episodic_buffer.compute_new_average()
                 action = self.agent.get_action(obs)
+                #action = np.zeros_like(action)+randint(0,6)
                 obs, reward, done, _ = self.env.step(action)
                 episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
@@ -79,9 +81,9 @@ class eval:
                     agent_position = torch.tensor(self.env.agent_pos)
                     agent_rotation = torch.tensor(self.env.agent_dir).unsqueeze(0)
                     agent_action = torch.tensor(action)
-                    agent_state = torch.cat((agent_position,agent_rotation, agent_action)) 
+                    agent_state = agent_position#torch.cat((agent_position,agent_rotation, agent_action)) 
                     step_index = int(self.episode_length_counter)
-                    self.trajectory[4*step_index:4*(step_index+1)]=agent_state.unsqueeze(1)
+                    self.trajectory[2*step_index:2*(step_index+1)]=agent_state.unsqueeze(1)
                 if done:
                     break
                 self.episode_length_counter += 1

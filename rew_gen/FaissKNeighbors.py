@@ -14,4 +14,4 @@ class FaissKNeighbors:
 
     def kneighbors(self, X):
         distances, indices = self.index.search(X.astype(np.float32), k=self.k)
-        return distances
+        return distances, indices
