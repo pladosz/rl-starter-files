@@ -212,16 +212,17 @@ for i in range(0,args.outer_workers):
 rew_gen_list = []
 RND_list = []
 best_trajectories_list = []
+eval_states_list = []
 lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(507, device)
+    rew_gen = RewGenNet(147, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(507, device)
+master_rew_gen = RewGenNet(147, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 network_noise_std = args.noise_std
@@ -358,7 +359,7 @@ while num_frames < args.frames:
         trajectories_list = []
         for ii in range(0,args.outer_workers):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, _, _ = evaluator.run()
+            trajectory, _, _, _, _ = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
         sample_number = args.random_samples
         for j in range(0,sample_number):
@@ -382,29 +383,21 @@ while num_frames < args.frames:
         trajectories_list = []
         entropy_list = [] 
         episodic_diversity_list = []
+        global_diversity_list = []
         for ii in range(0,args.outer_workers):
             if rerun_needed[ii]:
                 evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-                trajectory, episodic_diversity, repeatability_factor = evaluator.run()
+                trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run()
+                eval_states_list.extend(states_list)
                 trajectories_list.append(trajectory.cpu().numpy())
                 #normalize diversity with number of steps
                 episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
+                global_diversity_list.append(lifetime_diversity/100)
             else:
                 trajectories_list.append(old_trajectory_list[ii])
                 episodic_diversity_list.append(old_episodic_diversity_list[ii])
         txt_logger.info('episodic diversity')
         txt_logger.info(episodic_diversity_list)
-        #compute global diversity
-        global_diversity_list = []
-        #divide by 10000 to normalize
-        for ii in range(0,args.outer_workers):
-            if rerun_needed[ii]:
-                diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
-                diversity = min(max(diversity,0.001),100)
-                global_diversity_list.append(diversity)
-            else:
-                global_diversity_list.append(old_global_diversity_list[ii])
-        episodic_buffer.compute_new_average()
         txt_logger.info('diversity eval')
         txt_logger.info(global_diversity_list)
         rollout_eps_diversity = torch.tensor(episodic_diversity_list)
@@ -562,10 +555,8 @@ while num_frames < args.frames:
             best_trajectories_list.append(trajectories_list[index])
         if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
             txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
-            #network_noise_std = 2*args.noise_std
-            for item in best_trajectories_list:
-                episodic_buffer.add_state(item.squeeze())
-            best_trajectories_list = []
+            master_RND_model.train(eval_states_list)
+            eval_states_list = []
             # when trajectories updated, all agents need to update
             rerun_needed = []
             for ii in range(0, args.outer_workers):

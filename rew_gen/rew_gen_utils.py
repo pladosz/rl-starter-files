@@ -12,6 +12,7 @@ import argparse
 import time
 import datetime
 import torch_ac
+from torch._six import inf
 import tensorboardX
 import sys
 from rew_gen.rew_gen_model import RewGenNet
@@ -102,12 +103,12 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
-        rew_gen = RewGenNet(507, device)
+        rew_gen = RewGenNet(147, device)
         RND_model = RNDModelNet(device)
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(507, device)
+    master_rew_gen = RewGenNet(147, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))
@@ -270,7 +271,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     episodic_diversity_list = []
     for ii in range(0,args.TPA_agents):
         evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-        trajectory, episodic_diversity, repeatability_factor = evaluator.run()
+        trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity = evaluator.run()
         trajectories_list.append(trajectory.cpu().numpy())
         #normalize diversity with number of steps
         episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
@@ -336,3 +337,4 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
 
 
     return new_rew_gen_lr , z
+

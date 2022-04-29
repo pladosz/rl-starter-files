@@ -34,7 +34,7 @@ class eval:
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
 
         #load random rew_gen and rnd, it doesn't matter for visualisation
-        self.rew_gen_model = RewGenNet(507, device) #= rew_gen_model
+        self.rew_gen_model = RewGenNet(147, device) #= rew_gen_model
         self.rew_gen_model.load_state_dict(rew_gen_model)
         self.hidden_state = self.rew_gen_model.reset_hidden(0,training=True)
         self.RND_model = RND_model
@@ -51,6 +51,7 @@ class eval:
 
     def run(self):
         episodic_diversity_reward = 0
+        lifetime_diversity_reward = 0
         for episode in range(self.args.episodes):
             self.env.seed = 2150
             obs = self.env.reset()
@@ -58,6 +59,7 @@ class eval:
             self.episode_length_counter = 0
             #vlear episodic buffers and initalize the reward
             self.episodic_buffer.clear()
+            eval_state_list = []
             while True:
                 #get current state embedding using RND
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
@@ -72,6 +74,12 @@ class eval:
                 #action = np.zeros_like(action)+randint(0,6)
                 obs, reward, done, _ = self.env.step(action)
                 episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
+
+                RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
+                state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                lifetime_reward = self.RND_model.compute_intrinsic_reward(RND_observation)
+                lifetime_diversity_reward += lifetime_reward
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
                 current_obs = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 #obs_difference = current_obs - previous_obs
@@ -84,8 +92,9 @@ class eval:
                     agent_state = agent_position#torch.cat((agent_position,agent_rotation, agent_action)) 
                     step_index = int(self.episode_length_counter)
                     self.trajectory[2*step_index:2*(step_index+1)]=agent_state.unsqueeze(1)
+                    eval_state_list.append(RND_observation.cpu())
                 if done:
                     break
                 self.episode_length_counter += 1
             self.episode_count += 1
-        return self.trajectory, episodic_diversity_reward, self.repeteability_factor
+        return self.trajectory, episodic_diversity_reward, self.repeteability_factor, eval_state_list, lifetime_diversity_reward

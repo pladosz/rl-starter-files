@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from torch._six import inf
 
 # Function from https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
 def init_params(m):
@@ -13,7 +14,7 @@ def init_params(m):
 
 class RNDModelNet(torch.nn.Module):
     #code taken from https://github.com/jcwleo/random-network-distillation-pytorch/blob/master/model.py
-    def __init__(self,device, epsilon=1e-4, num_workers= 16):
+    def __init__(self,device, epsilon=1e-4, num_workers= 16, learning_rate = 1e-4, epoch = 4, update_proportion = 0.5, batch_size = 128):
         super(RNDModelNet, self).__init__()
         self.device = device
         feature_output = 1024
@@ -63,10 +64,18 @@ class RNDModelNet(torch.nn.Module):
         #self.var_mean_reward = RunningMeanStd(epsilon = epsilon)
         #self.var_mean_obs = RunningMeanStd(epsilon = epsilon)
         self.apply(init_params)
+        #for now here, maybe creating separate agent is a better idea
+        self.optimizer = torch.optim.Adam( list(self.predictor.parameters()),
+                                    lr=learning_rate)
+        self.epoch = epoch
+        self.update_proportion = update_proportion
+        self.batch_size = batch_size
+        #self.var_mean_reward = RunningMeanStd(epsilon = epsilon)
+        #self.var_mean_obs = RunningMeanStd(epsilon = epsilon)
 
     def forward(self, next_obs):
         next_obs = torch.tensor(next_obs).to(self.device)
-        next_obs = self.compress_frames(next_obs)
+        #next_obs = self.compress_frames(next_obs)
         target_feature = self.target(next_obs)
         predict_feature = self.predictor(next_obs)
         return predict_feature, target_feature
@@ -119,12 +128,60 @@ class RNDModelNet(torch.nn.Module):
     
     def compute_intrinsic_reward(self, next_obs):
         next_obs = torch.tensor(next_obs).to(self.device)
-        next_obs = self.compress_frames(next_obs).to(self.device)
+        #next_obs = self.compress_frames(next_obs).to(self.device)
         target_next_feature = self.target(next_obs).detach()
         predict_next_feature = self.predictor(next_obs).detach()
         intrinsic_reward = ((predict_next_feature - target_next_feature).pow(2).sum(1) / 2).detach().cpu().numpy()
         #intrinsic_reward = torch.dist(predict_next_feature, target_next_feature, 2)
         mean, std, count = np.mean(intrinsic_reward), np.std(intrinsic_reward), len(intrinsic_reward)
-        self.var_mean_reward.update_from_moments(mean, std ** 2, count)
-        intrinsic_reward = intrinsic_reward /np.sqrt(self.var_mean_reward.var)
+        #self.var_mean_reward.update_from_moments(mean, std ** 2, count)
+        intrinsic_reward = intrinsic_reward.item()# /np.sqrt(self.var_mean_reward.var)
         return intrinsic_reward
+
+    def train(self, data_set):
+        s_batch = torch.cat(data_set).to(self.device)
+        sample_range = np.arange(len(s_batch))
+        forward_mse = torch.nn.MSELoss(reduction='none')
+        for i in range(self.epoch):
+            np.random.shuffle(sample_range)
+            for j in range(int(len(s_batch) / self.batch_size)):
+                sample_idx = sample_range[self.batch_size * j:self.batch_size * (j + 1)]
+                predict_next_state_feature, target_next_state_feature = self.forward(s_batch[sample_idx])
+                forward_loss = forward_mse(predict_next_state_feature, target_next_state_feature.detach()).mean(-1)
+                # Proportion of exp used for predictor update
+                mask = torch.rand(len(forward_loss)).to(self.device)
+                mask = (mask < self.update_proportion).type(torch.FloatTensor).to(self.device)
+                forward_loss = (forward_loss * mask).sum() / torch.max(mask.sum(), torch.Tensor([1]).to(self.device))
+                self.optimizer.zero_grad()
+                loss = forward_loss
+                loss.backward()
+                self.global_grad_norm_(list(self.predictor.parameters()))
+                self.optimizer.step()
+
+    def global_grad_norm_(self, parameters, norm_type=2):
+        r"""Clips gradient norm of an iterable of parameters.
+        The norm is computed over all gradients together, as if they were
+        concatenated into a single vector. Gradients are modified in-place.
+        Arguments:
+            parameters (Iterable[Tensor] or Tensor): an iterable of Tensors or a
+                single Tensor that will have gradients normalized
+            max_norm (float or int): max norm of the gradients
+            norm_type (float or int): type of the used p-norm. Can be ``'inf'`` for
+                infinity norm.
+        Returns:
+            Total norm of the parameters (viewed as a single vector).
+        """
+        if isinstance(parameters, torch.Tensor):
+            parameters = [parameters]
+        parameters = list(filter(lambda p: p.grad is not None, parameters))
+        norm_type = float(norm_type)
+        if norm_type == inf:
+            total_norm = max(p.grad.data.abs().max() for p in parameters)
+        else:
+            total_norm = 0
+            for p in parameters:
+                param_norm = p.grad.data.norm(norm_type)
+                total_norm += param_norm.item() ** norm_type
+            total_norm = total_norm ** (1. / norm_type)
+
+        return total_norm        

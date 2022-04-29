@@ -74,8 +74,6 @@ class Episodic_buffer():
                 print(distance)
                 print(self.moving_average_distance)
                 exit()
-            print('similarity')
-            print(similarity)
             if similarity > self.s_m:
                 r_episodic = 0
             return r_episodic
