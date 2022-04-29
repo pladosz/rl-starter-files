@@ -103,12 +103,12 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
-        rew_gen = RewGenNet(147, device)
+        rew_gen = RewGenNet(363, device)
         RND_model = RNDModelNet(device)
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(147, device)
+    master_rew_gen = RewGenNet(363, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))
@@ -269,23 +269,20 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     trajectories_list = []
     entropy_list = [] 
     episodic_diversity_list = []
+    global_diversity_list = []
     for ii in range(0,args.TPA_agents):
-        evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-        trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity = evaluator.run()
-        trajectories_list.append(trajectory.cpu().numpy())
-        #normalize diversity with number of steps
-        episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
+            evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+            trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity = evaluator.run()
+            trajectories_list.append(trajectory.cpu().numpy())
+            #normalize diversity with number of steps
+            episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
+            lifetime_diversity = min(max(lifetime_diversity/100,1),5)
+            global_diversity_list.append(lifetime_diversity)
     #compute diversity for each outer worker
     txt_logger.info('episodic diversity TPA')
     txt_logger.info(episodic_diversity_list)
-    global_diversity_list = []
-    #divide by 10000 to normalize
-    for ii in range(0,args.TPA_agents):
-        diversity = episodic_buffer.compute_episodic_intrinsic_reward(trajectories_list[ii])
-        diversity = min(max(diversity,0.001),100)
-        global_diversity_list.append(diversity)
     #episodic_buffer.compute_new_average()
-    txt_logger.info('global diversity')
+    txt_logger.info('global diversity_TPA')
     txt_logger.info(global_diversity_list)
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)

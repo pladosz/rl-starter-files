@@ -34,7 +34,7 @@ class eval:
                     argmax=self.args.argmax, use_memory=self.args.memory, use_text=self.args.text, agent_id = self.args.agent_id)
 
         #load random rew_gen and rnd, it doesn't matter for visualisation
-        self.rew_gen_model = RewGenNet(147, device) #= rew_gen_model
+        self.rew_gen_model = RewGenNet(363, device) #= rew_gen_model
         self.rew_gen_model.load_state_dict(rew_gen_model)
         self.hidden_state = self.rew_gen_model.reset_hidden(0,training=True)
         self.RND_model = RND_model
@@ -71,15 +71,15 @@ class eval:
                 self.episodic_buffer.add_state(state_rep_rew_gen)
                 self.episodic_buffer.compute_new_average()
                 action = self.agent.get_action(obs)
-                #action = np.zeros_like(action)+randint(0,6)
+                action = np.zeros_like(action)+randint(0,6)
                 obs, reward, done, _ = self.env.step(action)
                 episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
 
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
-                lifetime_reward = self.RND_model.compute_intrinsic_reward(RND_observation)
-                lifetime_diversity_reward += lifetime_reward
+               
+                lifetime_diversity_reward +=  self.RND_model.compute_intrinsic_reward(RND_observation).item()
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
                 current_obs = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 #obs_difference = current_obs - previous_obs

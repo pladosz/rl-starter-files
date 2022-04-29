@@ -17,7 +17,7 @@ class RNDModelNet(torch.nn.Module):
     def __init__(self,device, epsilon=1e-4, num_workers= 16, learning_rate = 1e-4, epoch = 4, update_proportion = 0.5, batch_size = 128):
         super(RNDModelNet, self).__init__()
         self.device = device
-        feature_output = 1024
+        feature_output = 4096
         self.predictor = torch.nn.Sequential(
             torch.nn.Conv2d(3, 16, (2, 2)),
             torch.nn.LeakyReLU(),
@@ -26,9 +26,9 @@ class RNDModelNet(torch.nn.Module):
             torch.nn.Conv2d(32, 64, (2, 2)),
             torch.nn.LeakyReLU(),
             torch.nn.Flatten(),
-            torch.nn.Linear(feature_output, 512),
+            torch.nn.Linear(feature_output, 1024),
             torch.nn.ReLU(),
-            torch.nn.Linear(512, 512),
+            torch.nn.Linear(1024, 512),
             torch.nn.ReLU(),
             torch.nn.Linear(512, 512)
         )
@@ -41,9 +41,9 @@ class RNDModelNet(torch.nn.Module):
             torch.nn.Conv2d(32, 64, (2, 2)),
             torch.nn.LeakyReLU(),
             torch.nn.Flatten(),
-            torch.nn.Linear(feature_output, 512),
+            torch.nn.Linear(feature_output, 1024),
             torch.nn.ReLU(),
-            torch.nn.Linear(512, 512),
+            torch.nn.Linear(1024, 512),
             torch.nn.ReLU(),
             torch.nn.Linear(512, 512)
         )
@@ -70,8 +70,8 @@ class RNDModelNet(torch.nn.Module):
         self.epoch = epoch
         self.update_proportion = update_proportion
         self.batch_size = batch_size
-        #self.var_mean_reward = RunningMeanStd(epsilon = epsilon)
-        #self.var_mean_obs = RunningMeanStd(epsilon = epsilon)
+        self.var_mean_reward = self.RunningMeanStd(epsilon = epsilon)
+        self.var_mean_obs = self.RunningMeanStd(epsilon = epsilon)
 
     def forward(self, next_obs):
         next_obs = torch.tensor(next_obs).to(self.device)
@@ -125,6 +125,15 @@ class RNDModelNet(torch.nn.Module):
         #obs = torch.clamp(obs, min = -5, max = 5)
         obs = obs[:,None, :, :]
         return obs
+
+    def compute_new_mean_and_std(self, next_obs):
+        next_obs = torch.tensor(next_obs).to(self.device)
+        target_next_feature = self.target(next_obs).detach()
+        predict_next_feature = self.predictor(next_obs).detach()
+        intrinsic_reward = ((predict_next_feature - target_next_feature).pow(2).sum(1) / 2).detach().cpu().numpy()
+        #intrinsic_reward = torch.dist(predict_next_feature, target_next_feature, 2)
+        mean, std, count = np.mean(intrinsic_reward), np.std(intrinsic_reward), len(intrinsic_reward)
+        self.var_mean_reward.update_from_moments(mean, std ** 2, count)
     
     def compute_intrinsic_reward(self, next_obs):
         next_obs = torch.tensor(next_obs).to(self.device)
@@ -135,7 +144,7 @@ class RNDModelNet(torch.nn.Module):
         #intrinsic_reward = torch.dist(predict_next_feature, target_next_feature, 2)
         mean, std, count = np.mean(intrinsic_reward), np.std(intrinsic_reward), len(intrinsic_reward)
         #self.var_mean_reward.update_from_moments(mean, std ** 2, count)
-        intrinsic_reward = intrinsic_reward.item()# /np.sqrt(self.var_mean_reward.var)
+        intrinsic_reward = 1 + (intrinsic_reward-self.var_mean_reward.mean) /np.sqrt(self.var_mean_reward.var)# /np.sqrt(self.var_mean_reward.var)
         return intrinsic_reward
 
     def train(self, data_set):
@@ -184,4 +193,34 @@ class RNDModelNet(torch.nn.Module):
                 total_norm += param_norm.item() ** norm_type
             total_norm = total_norm ** (1. / norm_type)
 
-        return total_norm        
+        return total_norm
+
+    class RunningMeanStd(object):
+        # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+        def __init__(self, epsilon=1e-4, shape=()):
+            self.mean = np.zeros(shape, 'float64')
+            self.var = np.ones(shape, 'float64')
+            self.count = epsilon
+
+        def update(self, x):
+            batch_mean = np.mean(x, axis=0)
+            batch_var = np.var(x, axis=0)
+            batch_count = x.shape[0]
+            self.update_from_moments(batch_mean, batch_var, batch_count)
+
+        def update_from_moments(self, batch_mean, batch_var, batch_count):
+            delta = batch_mean - self.mean
+            tot_count = self.count + batch_count
+
+            new_mean = self.mean + delta * batch_count / tot_count
+            m_a = self.var * (self.count)
+            m_b = batch_var * (batch_count)
+            M2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count)
+            new_var = M2 / (self.count + batch_count)
+
+            new_count = batch_count + self.count
+
+            self.mean = new_mean
+            self.var = new_var
+            self.count = new_count
+

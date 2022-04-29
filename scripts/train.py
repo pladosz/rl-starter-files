@@ -217,12 +217,12 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(147, device)
+    rew_gen = RewGenNet(363, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(147, device)
+master_rew_gen = RewGenNet(363, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 network_noise_std = args.noise_std
@@ -384,18 +384,22 @@ while num_frames < args.frames:
         entropy_list = [] 
         episodic_diversity_list = []
         global_diversity_list = []
+        local_states_list = []
         for ii in range(0,args.outer_workers):
             if rerun_needed[ii]:
-                evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+                evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
                 trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run()
                 eval_states_list.extend(states_list)
+                local_states_list.extend(states_list)
                 trajectories_list.append(trajectory.cpu().numpy())
                 #normalize diversity with number of steps
                 episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
-                global_diversity_list.append(lifetime_diversity/100)
+                lifetime_diversity = min(max(lifetime_diversity/100,1),5)
+                global_diversity_list.append(lifetime_diversity)
             else:
                 trajectories_list.append(old_trajectory_list[ii])
                 episodic_diversity_list.append(old_episodic_diversity_list[ii])
+        master_RND_model.compute_new_mean_and_std(torch.cat(local_states_list))
         txt_logger.info('episodic diversity')
         txt_logger.info(episodic_diversity_list)
         txt_logger.info('diversity eval')
