@@ -385,12 +385,14 @@ while num_frames < args.frames:
         episodic_diversity_list = []
         global_diversity_list = []
         local_states_list = []
+        local_states_archive_list  = []
         for ii in range(0,args.outer_workers):
             if rerun_needed[ii]:
                 evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
                 trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run()
                 eval_states_list.extend(states_list)
                 local_states_list.extend(states_list)
+                local_states_archive_list.append(states_list)
                 trajectories_list.append(trajectory.cpu().numpy())
                 #normalize diversity with number of steps
                 episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
@@ -399,6 +401,10 @@ while num_frames < args.frames:
             else:
                 trajectories_list.append(old_trajectory_list[ii])
                 episodic_diversity_list.append(old_episodic_diversity_list[ii])
+                global_diversity_list.append(old_global_diversity_list[ii])
+                local_states_list.extend(old_local_states_list[ii])
+                eval_states_list.extend(old_local_states_list[ii])
+                local_states_archive_list.append(old_local_states_list[ii])
         master_RND_model.compute_new_mean_and_std(torch.cat(local_states_list))
         txt_logger.info('episodic diversity')
         txt_logger.info(episodic_diversity_list)
@@ -477,6 +483,7 @@ while num_frames < args.frames:
         old_episodic_diversity_list = []
         old_lifetime_returns_list = []
         old_global_diversity_list = []
+        old_local_states_list = []
         sampling_number = 0
         while not done:
             sample_flag_1 = random.uniform(0,1)
@@ -534,6 +541,8 @@ while num_frames < args.frames:
                 old_lifetime_returns_list.append(None)
                 old_global_diversity_list.append(None)
                 old_global_diversity_list.append(None)
+                old_local_states_list.append(None)
+                old_local_states_list.append(None)
             if len(noise_list) >= args.outer_workers-1:
                 if len(noise_list) > args.outer_workers-1:
                     for i in range(0, len(noise_list) - args.outer_workers-1):
@@ -550,8 +559,12 @@ while num_frames < args.frames:
                 old_episodic_diversity_list.append(episodic_diversity_list[best_agent_index])
                 old_lifetime_returns_list.append(lifetime_returns_original[best_agent_index])
                 old_global_diversity_list.append(global_diversity_list[best_agent_index])
+                print(len(local_states_archive_list))
+                print(best_agent_index)
+                old_local_states_list.append(local_states_archive_list[best_agent_index])
                 break
             sampling_number +=1
+
                 # add trajectories to buffer
         network_noise_std = args.noise_std
         for ii in range(0,top_trajectories_indexes.shape[0]):

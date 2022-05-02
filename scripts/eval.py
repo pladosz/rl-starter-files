@@ -63,7 +63,7 @@ class eval:
             while True:
                 #get current state embedding using RND
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
-                state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy()/10 #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 reward_intrinsic, self.hidden_state = self.rew_gen_model(state_rep_rew_gen, self.hidden_state)
                 #get episodic diversity
@@ -71,7 +71,6 @@ class eval:
                 self.episodic_buffer.add_state(state_rep_rew_gen)
                 self.episodic_buffer.compute_new_average()
                 action = self.agent.get_action(obs)
-                action = np.zeros_like(action)+randint(0,6)
                 obs, reward, done, _ = self.env.step(action)
                 episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
 
@@ -79,7 +78,7 @@ class eval:
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                
-                lifetime_diversity_reward +=  self.RND_model.compute_intrinsic_reward(RND_observation).item()
+                lifetime_diversity_reward +=  self.RND_model.compute_intrinsic_reward(RND_observation/10).item()
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
                 current_obs = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 #obs_difference = current_obs - previous_obs
@@ -92,7 +91,7 @@ class eval:
                     agent_state = agent_position#torch.cat((agent_position,agent_rotation, agent_action)) 
                     step_index = int(self.episode_length_counter)
                     self.trajectory[2*step_index:2*(step_index+1)]=agent_state.unsqueeze(1)
-                    eval_state_list.append(RND_observation.cpu())
+                    eval_state_list.append(RND_observation.cpu()/10)
                 if done:
                     break
                 self.episode_length_counter += 1
