@@ -61,6 +61,10 @@ class eval:
             self.episodic_buffer.clear()
             eval_state_list = []
             while True:
+                if self.args.argmax != True:
+                    print(self.args.argmax)
+                    print('I should never be False')
+                    exit()
                 #get current state embedding using RND
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy()/10 #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
@@ -96,4 +100,5 @@ class eval:
                     break
                 self.episode_length_counter += 1
             self.episode_count += 1
+        print(episodic_diversity_reward)
         return self.trajectory, episodic_diversity_reward, self.repeteability_factor, eval_state_list, lifetime_diversity_reward

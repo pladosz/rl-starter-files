@@ -52,7 +52,7 @@ print(f"Device: {device}\n")
 
 env = utils.make_env(args.env, args.seed)
 for _ in range(args.shift):
-    env.seed(140)
+    env.seed(2150)
     env.reset()
 print("Environment loaded\n")
 
@@ -82,17 +82,18 @@ env.render('human')
 
 for episode in range(args.episodes):
     print('episode {0}'.format(episode))
-    env.seed(140)
+    env.seed(2150)
     obs = env.reset()
-
+    total_eps_diversity = 0
     while True:
         env.render('human')
         if args.gif:
             frames.append(numpy.moveaxis(env.render("rgb_array"), 2, 0))
         RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
-        state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() 
+        state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy()/10
         #get episodic diversity
         eps_div = episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
+        total_eps_diversity += eps_div
         episodic_buffer.add_state(state_rep_rew_gen)
         episodic_buffer.compute_new_average()
         print('episodic_diversity_{0}'.format(eps_div))
@@ -101,6 +102,7 @@ for episode in range(args.episodes):
         agent.analyze_feedback(reward, done)
         print(action)
         if done or env.window.closed:
+            print('total_episodic_diversity_reward_{0}'.format(total_eps_diversity/100))
             break
 
     if env.window.closed:
