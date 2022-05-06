@@ -17,7 +17,7 @@ class RNDModelNet(torch.nn.Module):
     def __init__(self,device, epsilon=1e-4, num_workers= 16, learning_rate = 1e-4, epoch = 4, update_proportion = 0.5, batch_size = 128):
         super(RNDModelNet, self).__init__()
         self.device = device
-        feature_output = 4096
+        feature_output = 6400
         self.predictor = torch.nn.Sequential(
             torch.nn.Conv2d(3, 16, (2, 2)),
             torch.nn.LeakyReLU(),

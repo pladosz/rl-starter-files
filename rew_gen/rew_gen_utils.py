@@ -72,7 +72,7 @@ def update_weights(update_factor, network, z, args, weights_updates, c_z):
     return updated_z, update_factor
 
 
-def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights, RND_weights, episodic_buffer, txt_logger, z, envs_list_TPA, obs_space, preprocess_obss, action_space):
+def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights, RND_weights, episodic_buffer, txt_logger, z, envs_list_TPA, obs_space, preprocess_obss, action_space, RND_mean, RND_std):
     # create multiple envs
     status = {"num_frames": 0, "update": 0}
     envs_list = envs_list_TPA
@@ -103,15 +103,17 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     evo_updates = 0
     for i in range(0, args.TPA_agents):
         utils.seed(args.seed)
-        rew_gen = RewGenNet(363, device)
+        rew_gen = RewGenNet(507, device)
         RND_model = RNDModelNet(device)
         rew_gen_list.append(rew_gen)
         RND_list.append(RND_model)
     # initialise master rew gen and master RND
-    master_rew_gen = RewGenNet(363, device)
+    master_rew_gen = RewGenNet(507, device)
     master_rew_gen.load_state_dict(copy.deepcopy(master_weights))
     master_RND_model = RNDModelNet(device)
     master_RND_model.load_state_dict(copy.deepcopy(RND_weights))
+    master_RND_model.var_mean_reward.mean = RND_mean
+    master_RND_model.var_mean_reward.var = RND_std
 
     master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
     master_ACModel_model.load_state_dict(copy.deepcopy(acmodel_weights))
@@ -275,8 +277,8 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
             trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
-            episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
-            lifetime_diversity = min(max(lifetime_diversity/100,1),5)
+            episodic_diversity_list.append(episodic_diversity*repeatability_factor)
+            lifetime_diversity = min(max(lifetime_diversity,1),10)
             global_diversity_list.append(lifetime_diversity)
     #compute diversity for each outer worker
     txt_logger.info('episodic diversity TPA')

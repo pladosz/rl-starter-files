@@ -217,12 +217,12 @@ lifetime_returns = torch.zeros(args.outer_workers)
 evo_updates = 0
 for i in range(0, args.outer_workers):
     utils.seed(args.seed)
-    rew_gen = RewGenNet(363, device)
+    rew_gen = RewGenNet(507, device)
     RND_model = RNDModelNet(device)
     rew_gen_list.append(rew_gen)
     RND_list.append(RND_model)
 #initialise master rew gen and master RND
-master_rew_gen = RewGenNet(363, device)
+master_rew_gen = RewGenNet(507, device)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 network_noise_std = args.noise_std
@@ -389,14 +389,18 @@ while num_frames < args.frames:
         for ii in range(0,args.outer_workers):
             if rerun_needed[ii]:
                 evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+                #if evo_updates == 20 and ii == args.outer_workers - 2 :
+                #    txt_logger.info('cheating enabled')
+                #    trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run(cheat = True)
+                #else: 
                 trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run()
                 eval_states_list.extend(states_list)
                 local_states_list.extend(states_list)
                 local_states_archive_list.append(states_list)
                 trajectories_list.append(trajectory.cpu().numpy())
                 #normalize diversity with number of steps
-                episodic_diversity_list.append(episodic_diversity/100*repeatability_factor)
-                lifetime_diversity = min(max(lifetime_diversity/100,1),5)
+                episodic_diversity_list.append(episodic_diversity*repeatability_factor)
+                lifetime_diversity = min(max(lifetime_diversity,1),10)
                 global_diversity_list.append(lifetime_diversity)
             else:
                 trajectories_list.append(old_trajectory_list[ii])
@@ -405,7 +409,6 @@ while num_frames < args.frames:
                 local_states_list.extend(old_local_states_list[ii])
                 eval_states_list.extend(old_local_states_list[ii])
                 local_states_archive_list.append(old_local_states_list[ii])
-        master_RND_model.compute_new_mean_and_std(torch.cat(local_states_list))
         txt_logger.info('episodic diversity')
         txt_logger.info(episodic_diversity_list)
         txt_logger.info('diversity eval')
@@ -436,7 +439,7 @@ while num_frames < args.frames:
         #determine best step size
         for env in envs_list_TPA:
             env.reset()
-        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA)
+        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA, master_RND_model.var_mean_reward.mean, master_RND_model.var_mean_reward.var)
         args.rew_gen_lr = new_rew_gen_lr
         utils.seed(args.seed*542+num_frames-evo_updates)
         #utils.seed(args.seed*542+num_frames-evo_updates)
@@ -467,7 +470,7 @@ while num_frames < args.frames:
         #txt_logger.info(weight_norm)
         #sign_before = torch.sign(master_rew_gen.get_vectorized_param())
         #decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
-        weights_decay = -master_rew_gen.get_vectorized_param()*0.005
+        weights_decay = -master_rew_gen.get_vectorized_param()*0.05
         #sign_after = torch.sign(decayed_weights)
         #decayed_weights[sign_before != sign_after] = 0.0
         #weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
@@ -570,24 +573,34 @@ while num_frames < args.frames:
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
-        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
-            txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
-            master_RND_model.train(eval_states_list)
-            eval_states_list = []
-            # when trajectories updated, all agents need to update
-            rerun_needed = []
-            for ii in range(0, args.outer_workers):
-                rerun_needed.append(True)
-        #print(master_rew_gen.state_dict())
         #update weights of each rew gen with master weights and initialize new noise
         for ii in range(0,args.outer_workers-1):
             rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             rew_gen_list[ii].network_noise = copy.deepcopy(noise_list[ii]).unsqueeze(0)
             rew_gen_list[ii].update_weights(rew_gen_list[int(ii)].network_noise)
+        #if evo_updates == 20:
+        #    exit()
         evo_updates += 1
         txt_logger.info('evolutionary update {0} complete'.format(evo_updates))
         evol_end_time = time.time()
         txt_logger.info("computation_time_{0}".format(evol_end_time-evol_start_time))
+        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
+            txt_logger.info('diversity buffer updated in evo {0}'.format(evo_updates))
+            master_RND_model.train(eval_states_list)
+            master_RND_model.compute_new_mean_and_std(torch.cat(eval_states_list))
+            eval_states_list = []
+            # when trajectories updated, all agents need to update
+            noise_list = []
+            rerun_needed = []
+            old_trajectory_list = []
+            old_episodic_diversity_list = []
+            old_lifetime_returns_list = []
+            old_global_diversity_list = []
+            old_local_states_list = []
+            rerun_needed = []
+            for ii in range(0, args.outer_workers):
+                rerun_needed.append(True)
+        #print(master_rew_gen.state_dict())
         #write to log
         #convert to floatin point
         rollout_diversity_eval = 1.0*rollout_diversity_eval

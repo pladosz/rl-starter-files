@@ -85,6 +85,7 @@ for episode in range(args.episodes):
     env.seed(2150)
     obs = env.reset()
     total_eps_diversity = 0
+    step_counter = 0
     while True:
         env.render('human')
         if args.gif:
@@ -100,11 +101,10 @@ for episode in range(args.episodes):
         action = agent.get_action(obs)
         obs, reward, done, _ = env.step(action)
         agent.analyze_feedback(reward, done)
-        print(action)
         if done or env.window.closed:
             print('total_episodic_diversity_reward_{0}'.format(total_eps_diversity/100))
             break
-
+        step_counter += 1
     if env.window.closed:
         break
 
