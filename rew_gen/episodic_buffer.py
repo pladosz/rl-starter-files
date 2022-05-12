@@ -76,6 +76,8 @@ class Episodic_buffer():
                 exit()
             if similarity > self.s_m:
                 r_episodic = 0
+            if r_episodic < 0.34:
+                r_episodic = 0
             return r_episodic
     
     def compute_EMA(self,mu,x,last_average):

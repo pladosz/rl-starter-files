@@ -14,7 +14,7 @@ def init_params(m):
 
 class RNDModelNet(torch.nn.Module):
     #code taken from https://github.com/jcwleo/random-network-distillation-pytorch/blob/master/model.py
-    def __init__(self,device, epsilon=1e-4, num_workers= 16, learning_rate = 1e-4, epoch = 4, update_proportion = 0.5, batch_size = 128):
+    def __init__(self,device, epsilon=1e-4, num_workers= 16, learning_rate = 1e-4, epoch = 8, update_proportion = 0.5, batch_size = 512):
         super(RNDModelNet, self).__init__()
         self.device = device
         feature_output = 6400
@@ -74,7 +74,7 @@ class RNDModelNet(torch.nn.Module):
         self.var_mean_obs = self.RunningMeanStd(epsilon = epsilon)
 
     def forward(self, next_obs):
-        next_obs = torch.tensor(next_obs).to(self.device)
+        #next_obs = torch.tensor(next_obs).to(self.device)
         #next_obs = self.compress_frames(next_obs)
         target_feature = self.target(next_obs)
         predict_feature = self.predictor(next_obs)
@@ -127,7 +127,7 @@ class RNDModelNet(torch.nn.Module):
         return obs
 
     def compute_new_mean_and_std(self, next_obs):
-        next_obs = torch.tensor(next_obs).to(self.device)
+        #next_obs = torch.tensor(next_obs).to(self.device).detach()
         target_next_feature = self.target(next_obs).detach()
         predict_next_feature = self.predictor(next_obs).detach()
         intrinsic_reward = ((predict_next_feature - target_next_feature).pow(2).sum(1) / 2).detach().cpu().numpy()
@@ -136,15 +136,15 @@ class RNDModelNet(torch.nn.Module):
         self.var_mean_reward.update_from_moments(mean, std ** 2, count)
     
     def compute_intrinsic_reward(self, next_obs):
-        next_obs = torch.tensor(next_obs).to(self.device)
+        next_obs = torch.tensor(next_obs).to(self.device).detach()
         #next_obs = self.compress_frames(next_obs).to(self.device)
         target_next_feature = self.target(next_obs).detach()
         predict_next_feature = self.predictor(next_obs).detach()
         intrinsic_reward = ((predict_next_feature - target_next_feature).pow(2).sum(1) / 2).detach().cpu().numpy()
         #intrinsic_reward = torch.dist(predict_next_feature, target_next_feature, 2)
-        mean, std, count = np.mean(intrinsic_reward), np.std(intrinsic_reward), len(intrinsic_reward)
+        #mean, std, count = np.mean(intrinsic_reward), np.std(intrinsic_reward), len(intrinsic_reward)
         #self.var_mean_reward.update_from_moments(mean, std ** 2, count)
-        intrinsic_reward = 1 + (intrinsic_reward-self.var_mean_reward.mean) /np.sqrt(self.var_mean_reward.var)# /np.sqrt(self.var_mean_reward.var)
+        intrinsic_reward = 1 + (intrinsic_reward-self.var_mean_reward.mean) / np.sqrt(self.var_mean_reward.var)# /np.sqrt(self.var_mean_reward.var)
         return intrinsic_reward
 
     def train(self, data_set):

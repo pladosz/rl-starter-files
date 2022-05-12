@@ -272,14 +272,16 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     entropy_list = [] 
     episodic_diversity_list = []
     global_diversity_list = []
+    combined_diversity_list = []
     for ii in range(0,args.TPA_agents):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity = evaluator.run()
+            trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity, combined_diversity = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
             episodic_diversity_list.append(episodic_diversity*repeatability_factor)
-            lifetime_diversity = min(max(lifetime_diversity,1),10)
+            #lifetime_diversity = min(max(lifetime_diversity,1), 20)
             global_diversity_list.append(lifetime_diversity)
+            combined_diversity_list.append(combined_diversity)
     #compute diversity for each outer worker
     txt_logger.info('episodic diversity TPA')
     txt_logger.info(episodic_diversity_list)
@@ -288,8 +290,10 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     txt_logger.info(global_diversity_list)
     rollout_eps_diversity = torch.tensor(episodic_diversity_list)
     rollout_global_diversity = torch.tensor(global_diversity_list)
+    rollout_combined_diversity = torch.tensor(combined_diversity_list)
     lifetime_returns = 30*lifetime_returns
-    rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
+    #rollout_diversity_eval = (rollout_global_diversity * rollout_eps_diversity) + lifetime_returns
+    rollout_diversity_eval = rollout_combined_diversity + lifetime_returns
     txt_logger.info('diversity eval TPA')
     #compute step update
     best_agent = torch.argmax(rollout_diversity_eval)

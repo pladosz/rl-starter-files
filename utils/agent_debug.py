@@ -33,9 +33,9 @@ class Agent_debug:
 
         with torch.no_grad():
             if self.acmodel.recurrent:
-                dist, _, _, self.memories = self.acmodel(preprocessed_obss, self.memories)
+                dist, _, self.memories = self.acmodel(preprocessed_obss, self.memories)
             else:
-                dist, _, _ = self.acmodel(preprocessed_obss)
+                dist, _ = self.acmodel(preprocessed_obss)
 
         if self.argmax:
             actions = dist.probs.max(1, keepdim=True)[1]

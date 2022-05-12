@@ -49,9 +49,10 @@ class eval:
 
 
 
-    def run(self, cheat = False):
+    def run(self, cheat = False, txt_logger = None):
         episodic_diversity_reward = 0
         lifetime_diversity_reward = 0
+        combined_diversity_reward = 0
         for episode in range(self.args.episodes):
             self.env.seed = 2150
             obs = self.env.reset()
@@ -71,34 +72,37 @@ class eval:
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 reward_intrinsic, self.hidden_state = self.rew_gen_model(state_rep_rew_gen, self.hidden_state)
                 #get episodic diversity
-                eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
-                self.episodic_buffer.add_state(state_rep_rew_gen)
-                self.episodic_buffer.compute_new_average()
                 action = self.agent.get_action(obs)
                 if cheat == True:
                     step_counter = self.episode_length_counter
-                    if step_counter == 0:
-                        action[0] = 2
-                    if step_counter == 1:
-                        action[0] = 1
-                    if step_counter >= 2 and step_counter < 11:
-                        action[0] = 2
-                    if step_counter == 11:
-                        action[0] = 0
-                    if step_counter >= 12 and step_counter < 24:
-                        action[0] = 2
-                    if step_counter ==24:
-                        action[0] = 0
-                    if step_counter ==25:
-                        action[0] = 2        
+                    #if step_counter == 0:
+                    #    action[0] = 2
+                    #if step_counter == 1:
+                    #    action[0] = 1
+                    #if step_counter >= 2 and step_counter < 11:
+                    #    action[0] = 2
+                    #if step_counter == 11:
+                    #    action[0] = 0
+                    #if step_counter >= 12 and step_counter < 24:
+                    #    action[0] = 2
+                    #if step_counter ==24:
+                    #    action[0] = 0
+                    #if step_counter ==25:
+                    #    action[0] = 2        
                 obs, reward, done, _ = self.env.step(action)
-                episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
 
-                RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
+                RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()/10
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
+                episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
+                self.episodic_buffer.add_state(state_rep_rew_gen)
+                self.episodic_buffer.compute_new_average()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
-               
-                lifetime_diversity_reward +=  min(max(self.RND_model.compute_intrinsic_reward(RND_observation/10).item(),1),10)
+                lifetime_diversity_reward += min(max(self.RND_model.compute_intrinsic_reward(RND_observation).item(),1),20)
+                if txt_logger:
+                    txt_logger.info('lifetime reward per step')
+                    txt_logger.info(lifetime_diversity_reward)
+                combined_diversity_reward += min(max(self.RND_model.compute_intrinsic_reward(RND_observation).item(),1),20) * eps_div
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
                 current_obs = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 #obs_difference = current_obs - previous_obs
@@ -111,10 +115,10 @@ class eval:
                     agent_state = agent_position#torch.cat((agent_position,agent_rotation, agent_action)) 
                     step_index = int(self.episode_length_counter)
                     self.trajectory[2*step_index:2*(step_index+1)]=agent_state.unsqueeze(1)
-                    eval_state_list.append(RND_observation.cpu()/10)
+                    eval_state_list.append(RND_observation.cpu())
                 if done:
                     break
                 self.episode_length_counter += 1
             self.episode_count += 1
-        print(episodic_diversity_reward)
-        return self.trajectory, episodic_diversity_reward/self.episode_length_counter, self.repeteability_factor, eval_state_list, lifetime_diversity_reward/self.episode_length_counter
+        #print(episodic_diversity_reward)
+        return self.trajectory, episodic_diversity_reward/self.episode_length_counter, self.repeteability_factor, eval_state_list, lifetime_diversity_reward/self.episode_length_counter, combined_diversity_reward/self.episode_length_counter

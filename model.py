@@ -66,7 +66,7 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
         self.critic = nn.Sequential(
             nn.Linear(self.embedding_size, 64),
             nn.Tanh(),
-            PopArtLayer(64, 1)
+            nn.Linear(64, 1)
         )
 
         # Initialize parameters correctly
@@ -102,11 +102,10 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
         x = self.actor(embedding)
         dist = Categorical(logits=F.log_softmax(x, dim=1))
 
-        x, normalized_value = self.critic(embedding)
+        x = self.critic(embedding)
         value = x.squeeze(1)
-        normalized_value = normalized_value.squeeze(1)
 
-        return dist, value, normalized_value, memory
+        return dist, value, memory
 
     def _get_embed_text(self, text):
         _, hidden = self.text_rnn(self.word_embedding(text))

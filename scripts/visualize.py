@@ -99,10 +99,24 @@ for episode in range(args.episodes):
         episodic_buffer.compute_new_average()
         print('episodic_diversity_{0}'.format(eps_div))
         action = agent.get_action(obs)
+        #if step_counter == 0:
+        #    action[0] = 2
+        #if step_counter == 1:
+        #    action[0] = 1
+        #if step_counter >= 2 and step_counter < 11:
+        #    action[0] = 2
+        #if step_counter == 11:
+        #    action[0] = 0
+        #if step_counter >= 12 and step_counter < 24:
+        #    action[0] = 2
+        #if step_counter ==24:
+        #    action[0] = 0
+        #if step_counter ==25:
+        #    action[0] = 2        
         obs, reward, done, _ = env.step(action)
         agent.analyze_feedback(reward, done)
         if done or env.window.closed:
-            print('total_episodic_diversity_reward_{0}'.format(total_eps_diversity/100))
+            print('total_episodic_diversity_reward_{0}'.format(total_eps_diversity/step_counter))
             break
         step_counter += 1
     if env.window.closed:
