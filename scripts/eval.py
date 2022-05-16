@@ -53,6 +53,7 @@ class eval:
         episodic_diversity_reward = 0
         lifetime_diversity_reward = 0
         combined_diversity_reward = 0
+        overall_reward = 0
         for episode in range(self.args.episodes):
             self.env.seed = 2150
             obs = self.env.reset()
@@ -70,7 +71,6 @@ class eval:
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy()/10 #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
-                reward_intrinsic, self.hidden_state = self.rew_gen_model(state_rep_rew_gen, self.hidden_state)
                 #get episodic diversity
                 action = self.agent.get_action(obs)
                 if cheat == True:
@@ -90,18 +90,19 @@ class eval:
                     #if step_counter ==25:
                     #    action[0] = 2        
                 obs, reward, done, _ = self.env.step(action)
-
                 RND_observation = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()/10
                 state_rep_rew_gen =  torch.flatten(RND_observation, start_dim=1).cpu().numpy() #self.RND_model.get_state_rep(RND_observation).cpu().numpy()
+                reward_intrinsic, self.hidden_state = self.rew_gen_model(state_rep_rew_gen, self.hidden_state)
+                overall_reward += (reward+reward_intrinsic)
                 eps_div = self.episodic_buffer.compute_episodic_intrinsic_reward(state_rep_rew_gen)
                 episodic_diversity_reward += eps_div#(reward + reward_intrinsic)
                 self.episodic_buffer.add_state(state_rep_rew_gen)
                 self.episodic_buffer.compute_new_average()
                 #state_rep = self.RND_model.get_state_rep(RND_observation).cpu().numpy()
                 lifetime_diversity_reward += min(max(self.RND_model.compute_intrinsic_reward(RND_observation).item(),1),20)
-                if txt_logger:
-                    txt_logger.info('lifetime reward per step')
-                    txt_logger.info(lifetime_diversity_reward)
+                #if txt_logger:
+                #    txt_logger.info('lifetime reward per step')
+                #    txt_logger.info(lifetime_diversity_reward)
                 combined_diversity_reward += min(max(self.RND_model.compute_intrinsic_reward(RND_observation).item(),1),20) * eps_div
                 #add trajectory, actions are necessary otherwise finding key is not rewarded? alternatively we could try key status
                 current_obs = torch.tensor(obs['image'], device = device).transpose(0, 2).transpose(1, 2).unsqueeze(0).float()
@@ -121,4 +122,4 @@ class eval:
                 self.episode_length_counter += 1
             self.episode_count += 1
         #print(episodic_diversity_reward)
-        return self.trajectory, episodic_diversity_reward/self.episode_length_counter, self.repeteability_factor, eval_state_list, lifetime_diversity_reward/self.episode_length_counter, combined_diversity_reward/self.episode_length_counter
+        return self.trajectory, episodic_diversity_reward/self.episode_length_counter, self.repeteability_factor, eval_state_list, lifetime_diversity_reward/self.episode_length_counter, combined_diversity_reward/self.episode_length_counter, overall_reward

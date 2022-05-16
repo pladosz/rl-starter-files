@@ -275,7 +275,7 @@ def two_point_adaptation(weights_updates, args, master_weights, acmodel_weights,
     combined_diversity_list = []
     for ii in range(0,args.TPA_agents):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity, combined_diversity = evaluator.run()
+            trajectory, episodic_diversity, repeatability_factor, _, lifetime_diversity, combined_diversity, _ = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
             #normalize diversity with number of steps
             episodic_diversity_list.append(episodic_diversity*repeatability_factor)

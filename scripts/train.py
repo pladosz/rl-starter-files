@@ -359,7 +359,7 @@ while num_frames < args.frames:
         trajectories_list = []
         for ii in range(0,args.outer_workers):
             evaluator = eval(args.env, algos_list[ii].acmodel.state_dict(), algos_list[ii].RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
-            trajectory, _, _, _, _, _ = evaluator.run()
+            trajectory, _, _, _, _, _, _ = evaluator.run()
             trajectories_list.append(trajectory.cpu().numpy())
         sample_number = args.random_samples
         for j in range(0,sample_number):
@@ -394,7 +394,7 @@ while num_frames < args.frames:
                 #    txt_logger.info('cheating enabled')
                 #    trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run(cheat = True)
                 #else: 
-                trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity, combined_diversity = evaluator.run(txt_logger = txt_logger)
+                trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity, combined_diversity, _ = evaluator.run(txt_logger = txt_logger)
                 eval_states_list.extend(states_list)
                 local_states_list.extend(states_list)
                 local_states_archive_list.append(states_list)
@@ -580,8 +580,6 @@ while num_frames < args.frames:
 
                 # add trajectories to buffer
         network_noise_std = args.noise_std
-        if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
-            master_rew_gen = RewGenNet(507, device)
         for ii in range(0,top_trajectories_indexes.shape[0]):
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
@@ -689,6 +687,39 @@ while num_frames < args.frames:
         for ii in range(0,args.outer_workers):
             algos_list[ii].reset()
             #algos_list[ii].env.close()
+        #attempt to transfer policy agents
+        new_policy_weight_list = []
+        for ii in range(0,args.outer_workers):
+            #establish baseline score for agent i-th rew gen
+            agent_score_list = []
+            evaluator = eval(args.env, master_ACModel_model.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+            _, _, _, _, _, _, overall_reward = evaluator.run(txt_logger = txt_logger)
+            baseline_reward = overall_reward.cpu().squeeze().numpy()
+            #compute scores for all other policy agents
+            for jj in range(0, args.outer_workers):
+                evaluator = eval(args.env,  algos_list[jj].acmodel.state_dict(), master_RND_model, algos_list[ii].rew_gen_model.state_dict(), ii, argmax = True)
+                _, _, _, _, _, _, overall_reward = evaluator.run(txt_logger = txt_logger)
+                agent_score_list.append(overall_reward.cpu().squeeze().numpy())
+            agent_score_vector = np.array(agent_score_list)
+            agent_relative_score_vector = agent_score_vector - baseline_reward
+            #decide which one has the most potential and use it
+            best_score_index = np.argmax(agent_relative_score_vector)
+            txt_logger.info('scores list index, baseline score for agent {0}'.format(ii))
+            txt_logger.info(agent_relative_score_vector)
+            txt_logger.info(best_score_index)
+            txt_logger.info(baseline_reward)
+            best_score = agent_relative_score_vector[best_score_index]
+            print(best_score.shape)
+            if best_score.item() < 0:
+                new_policy_weight_list.append(copy.deepcopy(master_ACModel_model.state_dict()))
+                txt_logger.info('reusing original untrained policy')
+            else:
+                txt_logger.info('reusing best policy')
+                new_policy_weight_list.append(copy.deepcopy(algos_list[best_score_index].acmodel.state_dict()))
+            #if evo_updates == 20 and ii == args.outer_workers - 2 :
+            #    txt_logger.info('cheating enabled')
+            #    trajectory, episodic_diversity, repeatability_factor, states_list, lifetime_diversity = evaluator.run(cheat = True)
+            #else: 
         acmodels_list.clear()
         algos_list.clear()
         algos_list = []
@@ -702,7 +733,7 @@ while num_frames < args.frames:
             #if "model_state" in status:
             #acmodel.load_state_dict(status["model_state"])
             acmodel.to(device)
-            acmodel.load_state_dict(copy.deepcopy(master_ACModel_model.state_dict()))
+            acmodel.load_state_dict(copy.deepcopy(new_policy_weight_list[ii]))
             acmodels_list.append(acmodel)
         for ii in range(0,args.outer_workers):
             utils.seed(args.seed)
@@ -719,7 +750,8 @@ while num_frames < args.frames:
             else:
                 raise ValueError("Incorrect algorithm name: {}".format(args.algo))
             txt_logger.info("Optimizer loaded\n")
-        
+        #clear policy weight list
+        new_policy_weight_list = []
 
 
          
