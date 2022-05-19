@@ -295,7 +295,8 @@ while num_frames < args.frames:
             logs2 = algos_list[i].update_parameters(exps)
             logs = {**logs1, **logs2}
             update_end_time = time.time()
-            lifetime_returns[i] += sum(logs["return_per_episode"])
+            if update - (evo_updates*args.updates_per_evo_update) > args.updates_per_evo_update/2:
+                lifetime_returns[i] += max(logs["return_per_episode"])
             #delete after update
             exps = None
             logs1 = None
