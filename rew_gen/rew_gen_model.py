@@ -129,38 +129,86 @@ class RewGenNet(torch.nn.Module):
         #self.network_noise[mask] = 0
 #        self.update_weights(copy.deepcopy(self.network_noise))
 
+    # def update_weights(self,updates):
+    #     new_weights = updates.squeeze()
+    #     state_dict = self.state_dict()
+    #     new_parameter_dict = OrderedDict()
+    #     for param_type in state_dict:
+    #             numel = torch.numel(state_dict[param_type])
+    #             param_type_weight_update = new_weights[0:numel]
+    #             param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
+    #             new_parameter_dict[param_type] = param_type_weight_update + state_dict[param_type]
+    #             #delete already used weights
+    #             new_weights = new_weights[numel:]
+    #     if new_weights.shape[0] != 0:
+    #         print("I am error")
+    #         print(new_weights.shape)
+    #         exit()
+    #     self.load_state_dict(new_parameter_dict)
+
+    # def replace_weights(self,updates):
+    #     new_weights = updates.squeeze()
+    #     state_dict = self.state_dict()
+    #     new_parameter_dict = OrderedDict()
+    #     for param_type in state_dict:
+    #             numel = torch.numel(state_dict[param_type])
+    #             param_type_weight_update = new_weights[0:numel]
+    #             param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
+    #             new_parameter_dict[param_type] = param_type_weight_update
+    #             #delete already used weights
+    #             new_weights = new_weights[numel:]
+    #     if new_weights.shape[0] != 0:
+    #         print("I am error")
+    #         print(new_weights.shape)
+    #         exit()
+    #     self.load_state_dict(new_parameter_dict)
+
+    def replace_weights_debugg_needed(self,updates):
+        # this function is currently untested, test before using
+        print('replacing currently untested')
+        new_weights = updates.squeeze()
+        state_dict = self.state_dict()
+        new_parameter_dict = OrderedDict()
+        for i, p in enumerate(self.parameters()):
+            numel = torch.numel(p)
+            param_type_weight_update = new_weights[0:numel]
+            param_type_weight_update = torch.reshape(param_type_weight_update, p.shape)
+            p = param_type_weight_update
+            #delete already used weights
+            new_weights = new_weights[numel:]
+        if new_weights.shape[0] != 0:
+            print("I am error")
+            print(new_weights.shape)
+            exit()
+
     def update_weights(self,updates):
         new_weights = updates.squeeze()
-        state_dict = self.state_dict()
+        #state_dict = self.state_dict()
         new_parameter_dict = OrderedDict()
-        for param_type in state_dict:
-                numel = torch.numel(state_dict[param_type])
-                param_type_weight_update = new_weights[0:numel]
-                param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
-                new_parameter_dict[param_type] = param_type_weight_update + state_dict[param_type]
-                #delete already used weights
-                new_weights = new_weights[numel:]
+        for i, p in enumerate(self.parameters()):
+            numel = torch.numel(p)
+            param_type_weight_update = new_weights[0:numel]
+            param_type_weight_update = torch.reshape(param_type_weight_update, p.shape)
+            with torch.no_grad():
+                p.add_(param_type_weight_update)
+            #delete already used weights
+            new_weights = new_weights[numel:]
         if new_weights.shape[0] != 0:
             print("I am error")
             print(new_weights.shape)
             exit()
-        self.load_state_dict(new_parameter_dict)
+    
+    def add_grads_weights(self,updates):
+        for i, p in enumerate(self.parameters()):
+            numel = torch.numel(p)
+            grads = updates[0:numel]
+            grads = torch.reshape(grads, p.shape)
+            p.grad = torch.tensor(grads)
+            updates = updates[numel:]
+        if updates.shape[0] != 0:
+            print("I am error")
+            print(updates.shape)
+            exit()
 
-    def replace_weights(self,updates):
-        new_weights = updates.squeeze()
-        state_dict = self.state_dict()
-        new_parameter_dict = OrderedDict()
-        for param_type in state_dict:
-                numel = torch.numel(state_dict[param_type])
-                param_type_weight_update = new_weights[0:numel]
-                param_type_weight_update = torch.reshape(param_type_weight_update,state_dict[param_type].shape)
-                new_parameter_dict[param_type] = param_type_weight_update
-                #delete already used weights
-                new_weights = new_weights[numel:]
-        if new_weights.shape[0] != 0:
-            print("I am error")
-            print(new_weights.shape)
-            exit()
-        self.load_state_dict(new_parameter_dict)
 
 

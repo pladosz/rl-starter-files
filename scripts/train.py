@@ -223,6 +223,7 @@ for i in range(0, args.outer_workers):
     #RND_list.append(RND_model)
 #initialise master rew gen and master RND
 master_rew_gen = RewGenNet(507, device)
+rew_gen_optim = torch.optim.AdamW(master_rew_gen.parameters(),lr = args.rew_gen_lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.125)
 master_RND_model = RNDModelNet(device)
 master_rew_gen_original = copy.deepcopy(master_rew_gen.state_dict())
 network_noise_std = args.noise_std
@@ -231,9 +232,10 @@ rerun_needed = []
 master_ACModel_model = ACModel(obs_space, action_space, args.mem, args.text)
 ##load parameters of just one agent
 for i in range(0,args.outer_workers):
+    with torch.no_grad():
         rew_gen_list[i].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
         #RND_list[i].load_state_dict(copy.deepcopy(master_RND_model.state_dict()))
-        acmodels_list[i].load_state_dict(copy.deepcopy(master_ACModel_model.state_dict()))
+    acmodels_list[i].load_state_dict(copy.deepcopy(master_ACModel_model.state_dict()))
 #initalize noise
 for i in range(0,args.outer_workers):
     if i < args.outer_workers/2:
@@ -447,12 +449,13 @@ while num_frames < args.frames:
         #determine best step size
         for env in envs_list_TPA:
             env.reset()
-        new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA, master_RND_model.var_mean_reward.mean, master_RND_model.var_mean_reward.var)
-        args.rew_gen_lr = new_rew_gen_lr
+        #new_rew_gen_lr, z = two_point_adaptation(noise_effect_sum, args, master_rew_gen.state_dict(), master_ACModel_model.state_dict(), master_RND_model.state_dict(), episodic_buffer, txt_logger, z, envs_list_TPA, obs_space_TPA, preprocess_obss_TPA, action_space_TPA, master_RND_model.var_mean_reward.mean, master_RND_model.var_mean_reward.var)
+        #args.rew_gen_lr = new_rew_gen_lr
         utils.seed(args.seed*542+num_frames-evo_updates)
         #utils.seed(args.seed*542+num_frames-evo_updates)
         txt_logger.info('new step size {0}'.format(args.rew_gen_lr))
-        rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
+        #rew_gen_weight_updates = args.rew_gen_lr*noise_effect_sum #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum #args.rew_gen_lr*total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*(1/(args.outer_workers*args.noise_std))*noise_effect_sum  #total_noise[best_agent_index,:].squeeze() #args.rew_gen_lr*1/(args.outer_workers*args.noise_std)*noise_effect_sum
+        rew_gen_weight_updates = noise_effect_sum
         best_agent_index = torch.argmax(rollout_diversity_eval)
         #save most diverse agent
         status = {"num_frames": num_frames, "update": update,
@@ -469,7 +472,10 @@ while num_frames < args.frames:
         #print(rew_gen_weight_updates)
         #compute distributions ratio
         old_mean = copy.deepcopy(master_rew_gen.get_vectorized_param()).cuda()
-        master_rew_gen.update_weights(rew_gen_weight_updates)
+        #master_rew_gen.update_weights(rew_gen_weight_updates)
+        rew_gen_optim.zero_grad()
+        master_rew_gen.add_grads_weights(rew_gen_weight_updates)
+        rew_gen_optim.step()
         #weight decay to prevent convergence
         #if evo_updates % args.trajectory_updates_per_evo_updates == 0 and evo_updates != 0:
         #weight_norm = torch.linalg.vector_norm(torch.abs(master_rew_gen.get_vectorized_param()))
@@ -478,11 +484,11 @@ while num_frames < args.frames:
         #txt_logger.info(weight_norm)
         #sign_before = torch.sign(master_rew_gen.get_vectorized_param())
         #decayed_weights = master_rew_gen.get_vectorized_param() - torch.sign(master_rew_gen.get_vectorized_param())*0.002*weight_norm
-        weights_decay = -master_rew_gen.get_vectorized_param()*0.05
+        #weights_decay = -master_rew_gen.get_vectorized_param()*0.05
         #sign_after = torch.sign(decayed_weights)
         #decayed_weights[sign_before != sign_after] = 0.0
         #weights_decay_update = decayed_weights - master_rew_gen.get_vectorized_param()
-        master_rew_gen.update_weights(weights_decay)
+        #master_rew_gen.update_weights(weights_decay)
          #reuse old best agent
         rew_gen_list[args.outer_workers-1].load_state_dict(copy.deepcopy(rew_gen_list[best_agent_index].state_dict()))
         rew_gen_list[args.outer_workers-1].network_noise = (rew_gen_list[args.outer_workers-1].get_vectorized_param() - master_rew_gen.get_vectorized_param()).unsqueeze(0)
@@ -585,10 +591,12 @@ while num_frames < args.frames:
             index = int(top_trajectories_indexes[ii].item())
             best_trajectories_list.append(trajectories_list[index])
         #update weights of each rew gen with master weights and initialize new noise
+        print(noise_list)
         for ii in range(0,args.outer_workers-1):
             rew_gen_list[ii].load_state_dict(copy.deepcopy(master_rew_gen.state_dict()))
             rew_gen_list[ii].network_noise = copy.deepcopy(noise_list[ii]).unsqueeze(0)
             rew_gen_list[ii].update_weights(rew_gen_list[int(ii)].network_noise)
+        #exit()
         #if evo_updates == 20:
         #    exit()
         evo_updates += 1
@@ -603,6 +611,9 @@ while num_frames < args.frames:
             eval_states_list = []
             trajectories_list = []
             best_trajectories_list = []
+            #warm restart
+            rew_gen_optim = []
+            rew_gen_optim = torch.optim.AdamW(master_rew_gen.parameters(),lr = args.rew_gen_lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.125)
             # when trajectories updated, all agents need to update
             noise_list = []
             rerun_needed = []
